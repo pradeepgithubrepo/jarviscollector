@@ -31,8 +31,7 @@ class JarvisNotificationListener :
 
             if (
                 packageName != "com.whatsapp" &&
-                packageName != "com.whatsapp.w4b" &&
-                packageName != "com.google.android.apps.messaging"
+                packageName != "com.whatsapp.w4b"
             ) {
 
                 return
@@ -43,20 +42,22 @@ class JarvisNotificationListener :
                 sbn.notification.extras
 
 
-            val title =
+            val rawTitle =
                 extras.getString(
                     "android.title",
                     ""
                 )
 
 
-            val message =
+            val rawMessage =
                 extras
                     .getCharSequence(
                         "android.text"
                     )
                     ?.toString()
                     ?: ""
+
+            val (title, message) = NotificationNoiseFilter.normalize(rawTitle, rawMessage)
 
 
             if (
@@ -134,6 +135,10 @@ class JarvisNotificationListener :
                 Dispatchers.IO
             ).launch {
 
+                val ownerName =
+                    com.pradeep.jarviscollector.utils.AppPreferences
+                        .getOwnerName(applicationContext)
+
                 MobileSignalRepository
                     .save(
 
@@ -143,7 +148,7 @@ class JarvisNotificationListener :
                         signal = MobileSignal(
 
                             deviceId =
-                                "pradeep_phone",
+                                "${ownerName}_phone",
 
                             source =
                                 source,

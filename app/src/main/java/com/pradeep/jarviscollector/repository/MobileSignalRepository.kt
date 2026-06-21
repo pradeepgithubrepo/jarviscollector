@@ -7,15 +7,65 @@ import com.pradeep.jarviscollector.model.MobileSignal
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 object MobileSignalRepository {
+
+    private const val DUPLICATE_WINDOW_MS = 10000L
+    private val saveMutex = Mutex()
 
     suspend fun save(
         context: Context,
         signal: MobileSignal
     ) {
 
-        withContext(
+        saveMutex.withLock {
+            withContext(
+                Dispatchers.IO
+            ) {
+
+                val dao = JarvisDatabase
+                    .getDatabase(
+                        context
+                    )
+                    .mobileSignalDao()
+
+                // 1. Check for exact duplicate (e.g. SMS already imported)
+                val exactExists = dao.exists(
+                    sender = signal.sender,
+                    message = signal.message,
+                    timestamp = signal.timestamp,
+                    source = signal.source
+                )
+                if (exactExists) {
+                    return@withContext
+                }
+
+                // 2. Check for duplicate within time window (e.g. rapid notification updates)
+                val duplicateExists = dao.hasDuplicate(
+                    sender = signal.sender,
+                    message = signal.message,
+                    timestamp = signal.timestamp,
+                    windowMs = DUPLICATE_WINDOW_MS
+                )
+                if (duplicateExists) {
+                    return@withContext
+                }
+
+                dao.insert(
+                    signal
+                )
+            }
+        }
+    }
+
+    suspend fun exists(
+        context: Context,
+        signal: MobileSignal
+    ): Boolean {
+
+        return withContext(
             Dispatchers.IO
         ) {
 
@@ -24,8 +74,11 @@ object MobileSignalRepository {
                     context
                 )
                 .mobileSignalDao()
-                .insert(
-                    signal
+                .exists(
+                    sender = signal.sender,
+                    message = signal.message,
+                    timestamp = signal.timestamp,
+                    source = signal.source
                 )
         }
     }
@@ -85,6 +138,26 @@ object MobileSignalRepository {
         }
     }
 
+    suspend fun markSynced(
+        context: Context,
+        ids: List<Int>
+    ) {
+
+        withContext(
+            Dispatchers.IO
+        ) {
+
+            JarvisDatabase
+                .getDatabase(
+                    context
+                )
+                .mobileSignalDao()
+                .markSynced(
+                    ids
+                )
+        }
+    }
+
     suspend fun markAllSynced(
         context: Context
     ) {
@@ -99,6 +172,5 @@ object MobileSignalRepository {
                 .markAllSynced()
         }
     }
-
 
 }

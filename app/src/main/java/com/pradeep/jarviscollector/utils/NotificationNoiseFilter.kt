@@ -42,4 +42,23 @@ object NotificationNoiseFilter {
             )
         }
     }
+
+    fun normalize(
+        title: String,
+        message: String
+    ): Pair<String, String> {
+        val trimmedTitle = title.trim()
+        val trimmedMsg = message.trim()
+
+        val colonIndex = trimmedMsg.indexOf(": ")
+        if (colonIndex > 0 && !trimmedTitle.contains(": ")) {
+            val possibleSender = trimmedMsg.substring(0, colonIndex).trim()
+            val possibleMsg = trimmedMsg.substring(colonIndex + 2).trim()
+
+            if (possibleSender.isNotEmpty() && possibleSender.length <= 40 && !possibleSender.contains("\n")) {
+                return Pair("$trimmedTitle: $possibleSender", possibleMsg)
+            }
+        }
+        return Pair(trimmedTitle, trimmedMsg)
+    }
 }

@@ -55,6 +55,52 @@ interface MobileSignalDao {
 
     @Query(
         """
+        UPDATE mobile_signals
+        SET syncStatus='SYNCED'
+        WHERE id IN (:ids)
+        """
+    )
+    suspend fun markSynced(
+        ids: List<Int>
+    )
+
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM mobile_signals 
+            WHERE sender = :sender 
+              AND message = :message 
+              AND timestamp = :timestamp
+              AND source = :source
+        )
+        """
+    )
+    suspend fun exists(
+        sender: String,
+        message: String,
+        timestamp: Long,
+        source: String
+    ): Boolean
+
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM mobile_signals 
+            WHERE sender = :sender 
+              AND message = :message 
+              AND abs(timestamp - :timestamp) <= :windowMs
+        )
+        """
+    )
+    suspend fun hasDuplicate(
+        sender: String,
+        message: String,
+        timestamp: Long,
+        windowMs: Long
+    ): Boolean
+
+    @Query(
+        """
     UPDATE mobile_signals
     SET syncStatus='SYNCED'
     WHERE syncStatus='PENDING'
