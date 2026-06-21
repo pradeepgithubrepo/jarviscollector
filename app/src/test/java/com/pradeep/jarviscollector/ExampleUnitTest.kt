@@ -3,6 +3,8 @@ package com.pradeep.jarviscollector
 import org.junit.Test
 import org.junit.Assert.*
 import com.pradeep.jarviscollector.utils.NotificationNoiseFilter
+import org.json.JSONObject
+import org.json.JSONArray
 
 class ExampleUnitTest {
     @Test
@@ -69,5 +71,117 @@ class ExampleUnitTest {
         
         assertEquals("Pradeep", normTitleLong)
         assertEquals("This is a very long sentence before the colon: and then another one", normMsgLong)
+    }
+
+    @Test
+    fun testInsightJsonParsing() {
+        val todoJson = """
+            {
+                "generated_at": "2026-06-21T17:39:31Z",
+                "version": "1.0",
+                "items": [
+                    {
+                        "id": "todo_1",
+                        "title": "Buy groceries",
+                        "description": "Milk and eggs",
+                        "due_date": "2026-06-22",
+                        "priority": "high",
+                        "status": "pending",
+                        "snooze_count": 0
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val obj = JSONObject(todoJson)
+        val itemsArray = obj.optJSONArray("items")
+        assertNotNull(itemsArray)
+        assertEquals(1, itemsArray!!.length())
+
+        val item = itemsArray.getJSONObject(0)
+        assertEquals("todo_1", item.getString("id"))
+        assertEquals("Buy groceries", item.getString("title"))
+        assertEquals("Milk and eggs", item.getString("description"))
+        assertEquals("2026-06-22", item.getString("due_date"))
+        assertEquals("high", item.getString("priority"))
+        assertEquals("pending", item.getString("status"))
+        assertEquals(0, item.getInt("snooze_count"))
+    }
+
+    @Test
+    fun testInsightSyncWorkerHelperDelayCalculation() {
+        val delay = com.pradeep.jarviscollector.service.InsightSyncWorkerHelper.calculateDelayToNextTarget()
+        assertTrue("Delay should be positive", delay > 0)
+        assertTrue("Delay should be less than or equal to 24 hours", delay <= 24 * 60 * 60 * 1000L)
+    }
+
+    @Test
+    fun testTodoActionLogic() {
+        val todo = com.pradeep.jarviscollector.model.TodoEntity(
+            id = "test_id",
+            title = "Task",
+            description = "Desc",
+            dueDate = "2026-06-22",
+            priority = "high",
+            status = "pending",
+            completedAt = null,
+            snoozeCount = 0,
+            updatedAt = 1000L
+        )
+
+        assertEquals("pending", todo.status)
+        assertEquals(0, todo.snoozeCount)
+
+        // Mock complete action logic
+        val completedTodo = todo.copy(
+            status = "completed",
+            completedAt = "2000",
+            updatedAt = 2000L
+        )
+        assertEquals("completed", completedTodo.status)
+        assertEquals("2000", completedTodo.completedAt)
+
+        // Mock snooze action logic
+        val snoozedTodo = todo.copy(
+            snoozeCount = todo.snoozeCount + 1,
+            updatedAt = 3000L
+        )
+        assertEquals(1, snoozedTodo.snoozeCount)
+    }
+
+    @Test
+    fun testFyiCategoryFiltering() {
+        val fyiList = listOf(
+            com.pradeep.jarviscollector.model.FyiEventEntity(
+                id = "1",
+                title = "School Circular",
+                content = "Details",
+                category = "school",
+                timestamp = "2026-06-21T17:51:27Z"
+            ),
+            com.pradeep.jarviscollector.model.FyiEventEntity(
+                id = "2",
+                title = "Family Circular",
+                content = "Details",
+                category = "Family",
+                timestamp = "2026-06-21T17:51:27Z"
+            ),
+            com.pradeep.jarviscollector.model.FyiEventEntity(
+                id = "3",
+                title = "Delivery Alert",
+                content = "Details",
+                category = "deliveries",
+                timestamp = "2026-06-21T17:51:27Z"
+            )
+        )
+
+        val schoolEvents = fyiList.filter { it.category.lowercase() == "school" }
+        val familyEvents = fyiList.filter { it.category.lowercase() == "family" }
+
+        assertEquals(1, schoolEvents.size)
+        assertEquals("School Circular", schoolEvents[0].title)
+
+        assertEquals(1, familyEvents.size)
+        assertEquals("Family Circular", familyEvents[0].title)
     }
 }

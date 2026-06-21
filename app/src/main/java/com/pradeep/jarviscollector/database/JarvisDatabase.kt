@@ -8,15 +8,23 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 import com.pradeep.jarviscollector.model.MobileSignal
+import com.pradeep.jarviscollector.model.TodoEntity
+import com.pradeep.jarviscollector.model.FinancialEventEntity
+import com.pradeep.jarviscollector.model.FyiEventEntity
+import com.pradeep.jarviscollector.model.DailyBriefEntity
 
 
 @Database(
 
     entities = [
-        MobileSignal::class
+        MobileSignal::class,
+        TodoEntity::class,
+        FinancialEventEntity::class,
+        FyiEventEntity::class,
+        DailyBriefEntity::class
     ],
 
-    version = 1
+    version = 2
 )
 
 abstract class JarvisDatabase :
@@ -26,6 +34,10 @@ abstract class JarvisDatabase :
     abstract fun mobileSignalDao():
             MobileSignalDao
 
+    abstract fun todoDao(): TodoDao
+    abstract fun financialEventDao(): FinancialEventDao
+    abstract fun fyiEventDao(): FyiEventDao
+    abstract fun dailyBriefDao(): DailyBriefDao
 
 
     companion object {
@@ -55,6 +67,7 @@ abstract class JarvisDatabase :
                             "jarvis_mobile.db"
 
                         )
+                            .fallbackToDestructiveMigration()
                             .build()
 
 

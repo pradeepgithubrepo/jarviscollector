@@ -46,7 +46,15 @@ fun NotificationScreen(
 
     ownerName: String,
 
-    onOwnerNameChange: (String) -> Unit
+    onOwnerNameChange: (String) -> Unit,
+
+    isSyncingInsights: Boolean,
+
+    insightSyncResultMessage: String?,
+
+    onDismissInsightSyncResult: () -> Unit,
+
+    onSyncInsights: () -> Unit
 
 ) {
 
@@ -164,6 +172,20 @@ fun NotificationScreen(
 
                 Text(
                     "Sync Now"
+                )
+            }
+
+            Spacer(
+                modifier =
+                    Modifier.width(12.dp)
+            )
+
+            Button(
+                onClick = onSyncInsights
+            ) {
+
+                Text(
+                    "Sync Insights"
                 )
             }
         }
@@ -290,6 +312,55 @@ fun NotificationScreen(
             confirmButton = {
                 Button(
                     onClick = onDismissSyncResult
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    if (isSyncingInsights) {
+        Dialog(
+            onDismissRequest = {}
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Syncing insights...",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = "Downloading from Supabase",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+
+    if (insightSyncResultMessage != null) {
+        AlertDialog(
+            onDismissRequest = onDismissInsightSyncResult,
+            title = {
+                Text(text = "Insights Sync Finished")
+            },
+            text = {
+                Text(text = insightSyncResultMessage)
+            },
+            confirmButton = {
+                Button(
+                    onClick = onDismissInsightSyncResult
                 ) {
                     Text("OK")
                 }

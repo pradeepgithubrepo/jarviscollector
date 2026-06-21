@@ -50,6 +50,10 @@ android {
 
         compose = true
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -70,6 +74,10 @@ dependencies {
 
     implementation(
         libs.androidx.compose.material3
+    )
+
+    implementation(
+        "androidx.compose.material:material-icons-core"
     )
 
     implementation(
@@ -110,6 +118,10 @@ dependencies {
 
     testImplementation(
         libs.junit
+    )
+
+    testImplementation(
+        "org.json:json:20240303"
     )
 
     androidTestImplementation(
