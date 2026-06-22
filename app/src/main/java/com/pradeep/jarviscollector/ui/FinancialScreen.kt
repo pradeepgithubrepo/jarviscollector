@@ -26,24 +26,23 @@ fun FinancialScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Categorize events by upcoming, recent, and important
-    val upcomingEvents =
-        events.filter {
-            it.status == "upcoming" ||
-            it.type.lowercase() == "bill"
-        }
+    val upcomingEvents = events.filter {
+        val cat = it.category?.lowercase() ?: ""
+        val stat = it.status?.lowercase() ?: ""
+        stat == "upcoming" || cat == "bill"
+    }
 
-    val recentEvents =
-        events.filter {
-            it.status == "recent" ||
-            it.type.lowercase() == "upi"
-        }
+    val recentEvents = events.filter {
+        val cat = it.category?.lowercase() ?: ""
+        val stat = it.status?.lowercase() ?: ""
+        stat == "recent" || cat == "upi" || (stat != "upcoming" && cat != "bill" && stat != "important" && cat != "salary")
+    }
 
-    val importantEvents =
-        events.filter {
-            it.status == "important" ||
-            it.type.lowercase() == "salary"
-        }
+    val importantEvents = events.filter {
+        val cat = it.category?.lowercase() ?: ""
+        val stat = it.status?.lowercase() ?: ""
+        stat == "important" || cat == "salary"
+    }
 
     Column(
         modifier = modifier
@@ -80,7 +79,6 @@ fun FinancialScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Upcoming Payments Section
             if (upcomingEvents.isNotEmpty()) {
                 item {
                     FinancialSectionHeader(title = "UPCOMING PAYMENTS")
@@ -90,7 +88,6 @@ fun FinancialScreen(
                 }
             }
 
-            // Important Updates / Credits Section
             if (importantEvents.isNotEmpty()) {
                 item {
                     FinancialSectionHeader(title = "IMPORTANT CREDITS & SALARY")
@@ -100,10 +97,9 @@ fun FinancialScreen(
                 }
             }
 
-            // Recent UPI Activities Section
             if (recentEvents.isNotEmpty()) {
                 item {
-                    FinancialSectionHeader(title = "RECENT UPI ACTIVITY")
+                    FinancialSectionHeader(title = "RECENT ACTIVITY")
                 }
                 items(recentEvents) { event ->
                     FinancialCard(event = event)
@@ -147,9 +143,8 @@ fun FinancialCard(
     event: FinancialEventEntity,
     modifier: Modifier = Modifier
 ) {
-    val isCredit =
-        event.type.lowercase() == "salary" ||
-        (event.amount != null && event.amount > 0 && event.type.lowercase() != "bill")
+    val cat = event.category?.lowercase() ?: ""
+    val isCredit = cat == "salary" || (event.amount != null && event.amount > 0 && cat != "bill")
     
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -173,25 +168,28 @@ fun FinancialCard(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = event.title,
+                    text = event.merchant ?: event.category?.uppercase() ?: "Unknown Transaction",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
 
-                if (!event.description.isNullOrBlank()) {
+                val details = mutableListOf<String>()
+                if (!event.category.isNullOrBlank()) details.add("Category: ${event.category}")
+                if (!event.status.isNullOrBlank()) details.add("Status: ${event.status}")
+                if (details.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = event.description,
+                        text = details.joinToString(" | "),
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                if (!event.dueDate.isNullOrBlank()) {
+                if (!event.event_timestamp.isNullOrBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Due: ${event.dueDate}",
+                        text = "Date: ${event.event_timestamp}",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -200,9 +198,9 @@ fun FinancialCard(
             
             if (event.amount != null) {
                 Spacer(modifier = Modifier.width(12.dp))
-                
+                val currencySymbol = if (event.currency?.uppercase() == "USD") "$" else "₹"
                 Text(
-                    text = (if (isCredit) "+" else "-") + "$" + String.format("%.2f", abs(event.amount)),
+                    text = (if (isCredit) "+" else "-") + currencySymbol + String.format("%.2f", abs(event.amount)),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isCredit) Color(0xFF10B981) else Color(0xFFEF4444)

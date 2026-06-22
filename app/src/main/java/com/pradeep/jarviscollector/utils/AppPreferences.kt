@@ -68,4 +68,22 @@ object AppPreferences {
             .putLong(KEY_LAST_SMS_IMPORT_TIMESTAMP, timestamp)
             .apply()
     }
+
+    fun isHistoricalBackfillCompleted(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
+        return prefs.getBoolean("historical_backfill_completed", false)
+    }
+
+    fun setHistoricalBackfillCompleted(context: Context, completed: Boolean) {
+        val prefs = context.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
+        prefs.edit()
+            .putBoolean("historical_backfill_completed", completed)
+            .apply()
+    }
 }

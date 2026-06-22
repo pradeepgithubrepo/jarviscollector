@@ -26,6 +26,9 @@ fun HomeScreen(
     newFyiCount: Int,
     familyCount: Int,
     schoolCount: Int,
+    travelCount: Int,
+    healthCount: Int,
+    shoppingCount: Int,
     briefDate: String?,
     onNavigateToTodos: () -> Unit,
     onNavigateToFinancial: () -> Unit,
@@ -33,14 +36,16 @@ fun HomeScreen(
     onNavigateToDailyBrief: () -> Unit,
     onNavigateToFamily: () -> Unit,
     onNavigateToSchool: () -> Unit,
+    onNavigateToTravel: () -> Unit,
+    onNavigateToHealth: () -> Unit,
+    onNavigateToShopping: () -> Unit,
     onNavigateToCollectorSettings: () -> Unit,
     onOwnerNameChange: (String) -> Unit,
+    onLoadInsights: () -> Unit, // New callback for manual load
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    val formattedOwner = ownerName.replaceFirstChar {
-        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
-    }
+    val formattedOwner = ownerName.lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
     Column(
         modifier = modifier
@@ -176,6 +181,12 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        Button(onClick = { onLoadInsights() }) {
+            Text("Load Insights")
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
         // Row 1: TODOS & FINANCIAL
         Row(
             modifier = Modifier.fillMaxWidth()
@@ -262,6 +273,68 @@ fun HomeScreen(
                     accentColor = Color(0xFF3B82F6) // Blue
                 ),
                 onClick = onNavigateToSchool,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Row 4: TRAVEL & HEALTH
+        Row(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            AgentTile(
+                agent = AgentInfo(
+                    id = "travel",
+                    name = "Travel",
+                    statusText = if (travelCount > 0) "$travelCount Logs" else "No Travel Logs",
+                    badgeCount = travelCount,
+                    accentColor = Color(0xFF0D9488) // Teal-Green accent
+                ),
+                onClick = onNavigateToTravel,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            AgentTile(
+                agent = AgentInfo(
+                    id = "health",
+                    name = "Health",
+                    statusText = if (healthCount > 0) "$healthCount Alerts" else "No Health Alerts",
+                    badgeCount = healthCount,
+                    accentColor = Color(0xFFEF4444) // Red accent
+                ),
+                onClick = onNavigateToHealth,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Row 5: SHOPPING & PLACEHOLDER (Locked)
+        Row(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            AgentTile(
+                agent = AgentInfo(
+                    id = "shopping",
+                    name = "Shopping",
+                    statusText = if (shoppingCount > 0) "$shoppingCount Alerts" else "No Shopping Alerts",
+                    badgeCount = shoppingCount,
+                    accentColor = Color(0xFFF59E0B) // Amber accent
+                ),
+                onClick = onNavigateToShopping,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            AgentTile(
+                agent = AgentInfo(
+                    id = "leisure",
+                    name = "Leisure",
+                    statusText = "Locked",
+                    accentColor = Color(0xFF6B7280),
+                    isAvailable = false
+                ),
+                onClick = {},
                 modifier = Modifier.weight(1f)
             )
         }

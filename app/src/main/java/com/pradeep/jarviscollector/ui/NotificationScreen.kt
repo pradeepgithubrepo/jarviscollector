@@ -23,41 +23,33 @@ import androidx.compose.ui.window.Dialog
 import com.pradeep.jarviscollector.model.NotificationEvent
 import com.pradeep.jarviscollector.model.MobileSignal
 
+
+
 @Composable
 fun NotificationScreen(
-
     notifications: List<NotificationEvent>,
-
     roomSignals: List<MobileSignal>,
-
     onLoadRoom: () -> Unit,
-
     onExportJson: () -> Unit,
-
     onSyncNow: () -> Unit,
-
     exportPath: String,
-
     isSyncing: Boolean,
-
     syncResultMessage: String?,
-
     onDismissSyncResult: () -> Unit,
-
     ownerName: String,
-
     onOwnerNameChange: (String) -> Unit,
-
     isSyncingInsights: Boolean,
-
     insightSyncResultMessage: String?,
-
     onDismissInsightSyncResult: () -> Unit,
-
-    onSyncInsights: () -> Unit
-
+    onSyncInsights: () -> Unit,
+    isBackfilling: Boolean,
+    backfillStep: String?,
+    backfillResultMessage: String?,
+    backfillCompleted: Boolean,
+    onStartBackfill: () -> Unit,
+    onRunAgain: () -> Unit,
+    onDismissBackfillResult: () -> Unit
 ) {
-
     Column(
 
         modifier = Modifier
@@ -190,6 +182,46 @@ fun NotificationScreen(
             }
         }
 
+        Spacer(
+            modifier =
+                Modifier.height(16.dp)
+        )
+
+        Text(
+            text = "Historical Backfill",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Spacer(
+            modifier =
+                Modifier.height(8.dp)
+        )
+
+        if (backfillCompleted) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = {},
+                    enabled = false
+                ) {
+                    Text("Historical Backfill (Completed)")
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Button(
+                    onClick = onRunAgain
+                ) {
+                    Text("Run Again")
+                }
+            }
+        } else {
+            Button(
+                onClick = onStartBackfill
+            ) {
+                Text("Historical Backfill")
+            }
+        }
+
         if (
             exportPath.isNotBlank()
         ) {
@@ -270,36 +302,6 @@ fun NotificationScreen(
         }
     }
 
-    if (isSyncing) {
-        Dialog(
-            onDismissRequest = {}
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    CircularProgressIndicator()
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "Syncing in progress...",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Text(
-                        text = "Reading SMS & uploading to Supabase",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-
     if (syncResultMessage != null) {
         AlertDialog(
             onDismissRequest = onDismissSyncResult,
@@ -361,6 +363,56 @@ fun NotificationScreen(
             confirmButton = {
                 Button(
                     onClick = onDismissInsightSyncResult
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    if (isBackfilling) {
+        Dialog(
+            onDismissRequest = {}
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Historical Backfill",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = backfillStep ?: "Starting...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+
+    if (backfillResultMessage != null) {
+        AlertDialog(
+            onDismissRequest = onDismissBackfillResult,
+            title = {
+                Text(text = "Historical Backfill Completed")
+            },
+            text = {
+                Text(text = backfillResultMessage)
+            },
+            confirmButton = {
+                Button(
+                    onClick = onDismissBackfillResult
                 ) {
                     Text("OK")
                 }

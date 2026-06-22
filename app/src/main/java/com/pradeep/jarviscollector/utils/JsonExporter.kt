@@ -161,4 +161,27 @@ object JsonExporter {
         return root.toString(4)
     }
 
+    fun exportHistoricalSignalsAsString(
+        signals: List<MobileSignal>
+    ): String {
+        val jsonArray = JSONArray()
+        signals.forEach { signal ->
+            val obj = JSONObject()
+            obj.put("id", signal.id)
+            obj.put("deviceId", signal.deviceId)
+            obj.put("source", signal.source)
+            obj.put("sender", signal.sender)
+            obj.put("message", signal.message)
+            obj.put("timestamp", signal.timestamp)
+            jsonArray.put(obj)
+        }
+
+        val root = JSONObject()
+        root.put("type", "historical_backfill")
+        root.put("generatedAt", System.currentTimeMillis())
+        root.put("signals", jsonArray)
+
+        return root.toString(4)
+    }
+
 }

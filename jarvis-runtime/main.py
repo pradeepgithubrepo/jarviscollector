@@ -9,9 +9,22 @@ import sqlite3
 import requests
 import sys
 
-SUPABASE_URL = "https://tbwnyuampjoamgarwwoo.supabase.co"
-BUCKET_NAME = "jarvis-signals"
-ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRid255dWFtcGpvYW1nYXJ3d29vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzUwOTYsImV4cCI6MjA5NzUxMTA5Nn0.3CdCtROBH2l0wq8GVir9_3rWWZUtD9w2UWsz9caM3cg"
+def load_env(env_path):
+    if os.path.exists(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if '=' in line and not line.startswith('#'):
+                    k, v = line.split('=', 1)
+                    os.environ[k.strip()] = v.strip()
+
+# Load env variables from root .env or local .env
+load_env("../.env")
+load_env(".env")
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://tbwnyuampjoamgarwwoo.supabase.co")
+ANON_KEY = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRid255dWFtcGpvYW1nYXJ3d29vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzUwOTYsImV4cCI6MjA5NzUxMTA5Nn0.3CdCtROBH2l0wq8GVir9_3rWWZUtD9w2UWsz9caM3cg")
+BUCKET_NAME = os.environ.get("SUPABASE_BUCKET", "jarvis-signals")
 DB_PATH = "jarvis.db"
 
 HEADERS = {

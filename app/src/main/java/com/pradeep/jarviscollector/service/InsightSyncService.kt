@@ -4,23 +4,23 @@ import android.content.Context
 import android.util.Log
 import androidx.room.withTransaction
 import com.pradeep.jarviscollector.database.JarvisDatabase
-import com.pradeep.jarviscollector.model.DailyBriefEntity
+import com.pradeep.jarviscollector.model.TodoEntity
 import com.pradeep.jarviscollector.model.FinancialEventEntity
 import com.pradeep.jarviscollector.model.FyiEventEntity
-import com.pradeep.jarviscollector.model.TodoEntity
+import com.pradeep.jarviscollector.model.UserPreferenceEntity
 import com.pradeep.jarviscollector.network.JarvisInsightsClient
-import com.pradeep.jarviscollector.utils.AppPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
-import java.util.UUID
 
 sealed class InsightSyncResult {
     data class Success(
         val briefCount: Int,
         val todoCount: Int,
         val financialCount: Int,
-        val fyiCount: Int
+        val fyiCount: Int,
+        val prefCount: Int
     ) : InsightSyncResult()
 
     data class Failure(val error: String) : InsightSyncResult()
@@ -34,309 +34,157 @@ object InsightSyncService {
         context: Context
     ): InsightSyncResult = withContext(Dispatchers.IO) {
         try {
-            val ownerName =
-                AppPreferences.getOwnerName(context)
+            Log.d(TAG, "Starting direct Supabase insights schema pull...")
 
-            Log.d(
-                TAG,
-                "Starting insights sync for user: $ownerName"
-            )
+            // 1. Fetch tables from Supabase REST endpoints
+            val todosJson = JarvisInsightsClient.fetchTable("todos")
+            val financialJson = JarvisInsightsClient.fetchTable("financial_events")
+            val fyiJson = JarvisInsightsClient.fetchTable("fyi_events")
+            val preferencesJson = JarvisInsightsClient.fetchTable("user_preferences")
 
-            // 1. Download payloads
-            val briefJson =
-                JarvisInsightsClient
-                    .downloadInsightJson(
-                        ownerName,
-                        "daily_brief.json"
-                    )
+            val db = JarvisDatabase.getDatabase(context)
 
-            val todosJson =
-                JarvisInsightsClient
-                    .downloadInsightJson(
-                        ownerName,
-                        "todos.json"
-                    )
-
-            val financialJson =
-                JarvisInsightsClient
-                    .downloadInsightJson(
-                        ownerName,
-                        "financial.json"
-                    )
-
-            val fyiJson =
-                JarvisInsightsClient
-                    .downloadInsightJson(
-                        ownerName,
-                        "fyi.json"
-                    )
-
-            // Verify if any files were downloaded
-            if (
-                briefJson == null &&
-                todosJson == null &&
-                financialJson == null &&
-                fyiJson == null
-            ) {
-                return@withContext InsightSyncResult.Failure(
-                    "All downloads failed or no insights available on server for $ownerName."
-                )
-            }
-
-            val db =
-                JarvisDatabase.getDatabase(context)
-
-            var briefCount = 0
             var todoCount = 0
             var financialCount = 0
             var fyiCount = 0
+            var prefCount = 0
 
             db.withTransaction {
-                // Parse daily brief
-                if (briefJson != null) {
-                    try {
-                        val obj = JSONObject(briefJson)
-                        val genAt =
-                            obj.optString(
-                                "generated_at",
-                                System.currentTimeMillis().toString()
-                            )
-                        val version =
-                            obj.optString(
-                                "version",
-                                "1.0"
-                            )
-                        val items =
-                            obj.optJSONArray("items")
-                                ?.toString()
-                                ?: "[]"
-
-                        val briefEntity =
-                            DailyBriefEntity(
-                                id = genAt,
-                                generatedAt = genAt,
-                                version = version,
-                                itemsJson = items
-                            )
-
-                        db.dailyBriefDao().insert(briefEntity)
-                        briefCount = 1
-                    } catch (e: Exception) {
-                        Log.e(
-                            TAG,
-                            "Error processing daily_brief.json",
-                            e
-                        )
-                    }
-                }
-
-                // Parse todos
+                // 1. Sync Todos
                 if (todosJson != null) {
                     try {
-                        val obj = JSONObject(todosJson)
-                        val itemsArray =
-                            obj.optJSONArray("items")
-                        val todosList =
-                            mutableListOf<TodoEntity>()
-
-                        if (itemsArray != null) {
-                            for (i in 0 until itemsArray.length()) {
-                                val item =
-                                    itemsArray.getJSONObject(i)
-                                todosList.add(
-                                    TodoEntity(
-                                        id =
-                                            item.optString(
-                                                "id",
-                                                UUID.randomUUID().toString()
-                                            ),
-                                        title =
-                                            item.optString(
-                                                "title",
-                                                ""
-                                            ),
-                                        description =
-                                            if (item.isNull("description")) null else item.optString("description"),
-                                        dueDate =
-                                            if (item.isNull("due_date")) null else item.optString("due_date"),
-                                        priority =
-                                            if (item.isNull("priority")) "medium" else item.optString("priority"),
-                                        status =
-                                            item.optString(
-                                                "status",
-                                                "pending"
-                                            ),
-                                        completedAt =
-                                            if (item.isNull("completed_at")) null else item.optString("completed_at"),
-                                        snoozeCount =
-                                            item.optInt(
-                                                "snooze_count",
-                                                0
-                                            ),
-                                        updatedAt =
-                                            System.currentTimeMillis()
-                                    )
+                        val array = JSONArray(todosJson)
+                        val list = mutableListOf<TodoEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                TodoEntity(
+                                    todo_id = obj.getString("todo_id"),
+                                    title = if (obj.isNull("title")) null else obj.getString("title"),
+                                    description = if (obj.isNull("description")) null else obj.getString("description"),
+                                    priority = if (obj.isNull("priority")) null else obj.getString("priority"),
+                                    status = obj.optString("status", "OPEN"),
+                                    due_date = if (obj.isNull("due_date")) null else obj.getString("due_date"),
+                                    source_signal_id = if (obj.isNull("source_signal_id")) null else obj.getString("source_signal_id"),
+                                    created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
                                 )
-                            }
+                            )
                         }
-
                         db.todoDao().deleteAll()
-                        if (todosList.isNotEmpty()) {
-                            db.todoDao().insertAll(todosList)
-                            todoCount = todosList.size
+                        if (list.isNotEmpty()) {
+                            db.todoDao().insertAll(list)
+                            todoCount = list.size
                         }
                     } catch (e: Exception) {
-                        Log.e(
-                            TAG,
-                            "Error processing todos.json",
-                            e
-                        )
+                        Log.e(TAG, "Error syncing todos", e)
                     }
                 }
 
-                // Parse financial events
+                // 2. Sync Financial Events
                 if (financialJson != null) {
                     try {
-                        val obj = JSONObject(financialJson)
-                        val itemsArray =
-                            obj.optJSONArray("items")
-                        val financialList =
-                            mutableListOf<FinancialEventEntity>()
-
-                        if (itemsArray != null) {
-                            for (i in 0 until itemsArray.length()) {
-                                val item =
-                                    itemsArray.getJSONObject(i)
-                                financialList.add(
-                                    FinancialEventEntity(
-                                        id =
-                                            item.optString(
-                                                "id",
-                                                UUID.randomUUID().toString()
-                                            ),
-                                        title =
-                                            item.optString(
-                                                "title",
-                                                ""
-                                            ),
-                                        amount =
-                                            if (item.isNull("amount")) null else item.optDouble("amount"),
-                                        type =
-                                            item.optString(
-                                                "type",
-                                                ""
-                                            ),
-                                        dueDate =
-                                            if (item.isNull("due_date")) null else item.optString("due_date"),
-                                        status =
-                                            if (item.isNull("status")) null else item.optString("status"),
-                                        description =
-                                            if (item.isNull("description")) null else item.optString("description")
-                                    )
+                        val array = JSONArray(financialJson)
+                        val list = mutableListOf<FinancialEventEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                FinancialEventEntity(
+                                    financial_event_id = obj.getString("financial_event_id"),
+                                    merchant = if (obj.isNull("merchant")) null else obj.getString("merchant"),
+                                    amount = if (obj.isNull("amount")) null else obj.getDouble("amount"),
+                                    currency = if (obj.isNull("currency")) null else obj.getString("currency"),
+                                    category = if (obj.isNull("category")) null else obj.getString("category"),
+                                    status = if (obj.isNull("status")) null else obj.getString("status"),
+                                    event_timestamp = if (obj.isNull("event_timestamp")) null else obj.getString("event_timestamp"),
+                                    source_signal_id = if (obj.isNull("source_signal_id")) null else obj.getString("source_signal_id"),
+                                    created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
                                 )
-                            }
+                            )
                         }
-
                         db.financialEventDao().deleteAll()
-                        if (financialList.isNotEmpty()) {
-                            db.financialEventDao()
-                                .insertAll(financialList)
-                            financialCount =
-                                financialList.size
+                        if (list.isNotEmpty()) {
+                            db.financialEventDao().insertAll(list)
+                            financialCount = list.size
                         }
                     } catch (e: Exception) {
-                        Log.e(
-                            TAG,
-                            "Error processing financial.json",
-                            e
-                        )
+                        Log.e(TAG, "Error syncing financial events", e)
                     }
                 }
 
-                // Parse FYI events
+                // 3. Sync FYI Events
                 if (fyiJson != null) {
                     try {
-                        val obj = JSONObject(fyiJson)
-                        val itemsArray =
-                            obj.optJSONArray("items")
-                        val fyiList =
-                            mutableListOf<FyiEventEntity>()
-
-                        if (itemsArray != null) {
-                            for (i in 0 until itemsArray.length()) {
-                                val item =
-                                    itemsArray.getJSONObject(i)
-                                fyiList.add(
-                                    FyiEventEntity(
-                                        id =
-                                            item.optString(
-                                                "id",
-                                                UUID.randomUUID().toString()
-                                            ),
-                                        title =
-                                            item.optString(
-                                                "title",
-                                                ""
-                                            ),
-                                        content =
-                                            item.optString(
-                                                "content",
-                                                ""
-                                            ),
-                                        category =
-                                            item.optString(
-                                                "category",
-                                                "other"
-                                            ),
-                                        timestamp =
-                                            item.optString(
-                                                "timestamp",
-                                                ""
-                                            )
-                                    )
+                        val array = JSONArray(fyiJson)
+                        val list = mutableListOf<FyiEventEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                FyiEventEntity(
+                                    fyi_event_id = obj.getString("fyi_event_id"),
+                                    title = if (obj.isNull("title")) null else obj.getString("title"),
+                                    summary = if (obj.isNull("summary")) null else obj.getString("summary"),
+                                    category = if (obj.isNull("category")) null else obj.getString("category"),
+                                    read_flag = if (obj.isNull("read_flag")) false else obj.getBoolean("read_flag"),
+                                    source_signal_id = if (obj.isNull("source_signal_id")) null else obj.getString("source_signal_id"),
+                                    created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
                                 )
-                            }
+                            )
                         }
-
                         db.fyiEventDao().deleteAll()
-                        if (fyiList.isNotEmpty()) {
-                            db.fyiEventDao().insertAll(fyiList)
-                            fyiCount = fyiList.size
+                        if (list.isNotEmpty()) {
+                            db.fyiEventDao().insertAll(list)
+                            fyiCount = list.size
                         }
                     } catch (e: Exception) {
-                        Log.e(
-                            TAG,
-                            "Error processing fyi.json",
-                            e
-                        )
+                        Log.e(TAG, "Error syncing FYI events", e)
+                    }
+                }
+
+                // 4. Sync User Preferences
+                if (preferencesJson != null) {
+                    try {
+                        val array = JSONArray(preferencesJson)
+                        val list = mutableListOf<UserPreferenceEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                UserPreferenceEntity(
+                                    preference_key = obj.getString("preference_key"),
+                                    preference_value = if (obj.isNull("preference_value")) null else obj.getString("preference_value"),
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
+                                )
+                            )
+                        }
+                        db.userPreferenceDao().deleteAll()
+                        if (list.isNotEmpty()) {
+                            db.userPreferenceDao().insertAll(list)
+                            prefCount = list.size
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error syncing user preferences", e)
                     }
                 }
             }
 
             Log.d(
                 TAG,
-                "Sync complete: brief=$briefCount, todos=$todoCount, financial=$financialCount, fyi=$fyiCount"
+                "Sync complete: todos=$todoCount, financial=$financialCount, fyi=$fyiCount, preferences=$prefCount"
             )
 
             InsightSyncResult.Success(
-                briefCount,
-                todoCount,
-                financialCount,
-                fyiCount
+                briefCount = 0,
+                todoCount = todoCount,
+                financialCount = financialCount,
+                fyiCount = fyiCount,
+                prefCount = prefCount
             )
 
-        } catch (
-            ex: Exception
-        ) {
-            Log.e(
-                TAG,
-                "Error in syncInsights: ${ex.message}",
-                ex
-            )
-
-            InsightSyncResult.Failure(
-                ex.message ?: "Unknown error"
-            )
+        } catch (ex: Exception) {
+            Log.e(TAG, "Error in syncInsights: ${ex.message}", ex)
+            InsightSyncResult.Failure(ex.message ?: "Unknown error")
         }
     }
 }

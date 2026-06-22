@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
 
     alias(libs.plugins.android.application)
@@ -13,6 +16,17 @@ android {
 
     compileSdk = 36
 
+    val envFile = rootProject.file(".env")
+    val env = Properties()
+    if (envFile.exists()) {
+        FileInputStream(envFile).use { env.load(it) }
+    }
+
+
+    val supabaseUrl = env.getProperty("SUPABASE_URL") ?: ""
+    val supabaseKey = env.getProperty("SUPABASE_KEY") ?: ""
+    val supabaseSecretKey = env.getProperty("SUPABASE_SECRET_KEY") ?: ""
+
     defaultConfig {
 
         applicationId = "com.pradeep.jarviscollector"
@@ -27,6 +41,10 @@ android {
 
         testInstrumentationRunner =
             "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
+        buildConfigField("String", "SUPABASE_SECRET_KEY", "\"$supabaseSecretKey\"")
     }
 
     buildTypes {
@@ -49,6 +67,7 @@ android {
     buildFeatures {
 
         compose = true
+        buildConfig = true
     }
 
     testOptions {

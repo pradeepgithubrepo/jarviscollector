@@ -107,4 +107,14 @@ interface MobileSignalDao {
     """
     )
     suspend fun markAllSynced()
+
+    @Query(
+        """
+        SELECT *
+        FROM mobile_signals
+        WHERE source = :source
+        ORDER BY timestamp DESC
+        """
+    )
+    suspend fun getSignalsBySource(source: String): List<MobileSignal>
 }

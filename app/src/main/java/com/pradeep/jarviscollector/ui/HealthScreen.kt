@@ -20,7 +20,7 @@ import com.pradeep.jarviscollector.model.FyiEventEntity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FamilyScreen(
+fun HealthScreen(
     events: List<FyiEventEntity>,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -33,7 +33,7 @@ fun FamilyScreen(
         TopAppBar(
             title = {
                 Text(
-                    text = "Family Agent",
+                    text = "Health Agent",
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
                 )
@@ -60,7 +60,7 @@ fun FamilyScreen(
                     .weight(1f)
             ) {
                 Text(
-                    text = "No family updates found.",
+                    text = "No health alerts or logs found.",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
@@ -77,7 +77,7 @@ fun FamilyScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(events, key = { it.fyi_event_id }) { event ->
-                    FamilyCard(event = event)
+                    HealthCard(event = event)
                 }
             }
         }
@@ -85,11 +85,11 @@ fun FamilyScreen(
 }
 
 @Composable
-fun FamilyCard(
+fun HealthCard(
     event: FyiEventEntity,
     modifier: Modifier = Modifier
 ) {
-    val accentColor = Color(0xFFEC4899) // Pink accent for Family Agent
+    val accentColor = Color(0xFFEF4444) // Red accent for Health Agent
     
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -115,7 +115,7 @@ fun FamilyCard(
                     color = accentColor.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text = "FAMILY UPDATE",
+                        text = "HEALTH ALERT",
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = accentColor,
@@ -138,7 +138,7 @@ fun FamilyCard(
             Spacer(modifier = Modifier.height(10.dp))
             
             Text(
-                text = event.title ?: "Family Update",
+                text = event.title ?: "Health Alert",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface

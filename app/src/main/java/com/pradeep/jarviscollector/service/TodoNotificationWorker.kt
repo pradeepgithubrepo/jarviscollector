@@ -9,7 +9,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.pradeep.jarviscollector.repository.InsightsRepository
+import com.pradeep.jarviscollector.repository.TodoRepository
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -24,7 +24,7 @@ class TodoNotificationWorker(
         Log.d("TodoNotificationWorker", "Running todo notification check...")
         
         try {
-            val todos = InsightsRepository.getPendingTodos(applicationContext)
+            val todos = TodoRepository.getPendingTodos(applicationContext)
             if (todos.isEmpty()) {
                 Log.d("TodoNotificationWorker", "No pending todos found.")
                 return Result.success()
@@ -43,19 +43,19 @@ class TodoNotificationWorker(
             var notificationId = 2000
 
             for (todo in todos) {
-                val dueDate = todo.dueDate
+                val dueDate = todo.due_date
                 if (dueDate == todayStr) {
                     sendNotification(
                         id = notificationId++,
                         title = "Task Due Today",
-                        content = todo.title,
+                        content = todo.title ?: "Untitled Task",
                         priority = NotificationCompat.PRIORITY_HIGH
                     )
                 } else if (dueDate == tomorrowStr) {
                     sendNotification(
                         id = notificationId++,
                         title = "Task Due Tomorrow",
-                        content = todo.title,
+                        content = todo.title ?: "Untitled Task",
                         priority = NotificationCompat.PRIORITY_DEFAULT
                     )
                 }
@@ -67,7 +67,6 @@ class TodoNotificationWorker(
                 ex
             )
         } finally {
-            // Reschedule notification checks
             TodoNotificationHelper.initialize(applicationContext)
         }
         
@@ -82,7 +81,6 @@ class TodoNotificationWorker(
     ) {
         val channelId = "todo_reminders"
         
-        // Ensure channel is registered on API 26+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val name = "Todo Reminders"
             val desc = "Notifications for tasks due today or tomorrow"

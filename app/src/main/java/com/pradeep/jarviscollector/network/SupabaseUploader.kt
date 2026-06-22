@@ -1,5 +1,6 @@
 package com.pradeep.jarviscollector.network
 
+import com.pradeep.jarviscollector.BuildConfig
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -7,14 +8,13 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 object SupabaseUploader {
 
-    private const val SUPABASE_URL =
-        "https://tbwnyuampjoamgarwwoo.supabase.co"
+    private val SUPABASE_URL = BuildConfig.SUPABASE_URL
 
     private const val BUCKET_NAME =
         "jarvis-signals"
 
-    private const val ANON_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRid255dWFtcGpvYW1nYXJ3d29vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MzUwOTYsImV4cCI6MjA5NzUxMTA5Nn0.3CdCtROBH2l0wq8GVir9_3rWWZUtD9w2UWsz9caM3cg"
+    private val ANON_KEY = BuildConfig.SUPABASE_KEY
+
 
 
     fun uploadJson(

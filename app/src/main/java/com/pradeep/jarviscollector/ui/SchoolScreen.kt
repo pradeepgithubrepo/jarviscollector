@@ -76,7 +76,7 @@ fun SchoolScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(events, key = { it.id }) { event ->
+                items(events, key = { it.fyi_event_id }) { event ->
                     SchoolCard(event = event)
                 }
             }
@@ -126,9 +126,9 @@ fun SchoolCard(
                     )
                 }
                 
-                if (!event.timestamp.isNullOrBlank()) {
+                if (!event.created_at.isNullOrBlank()) {
                     Text(
-                        text = event.timestamp,
+                        text = event.created_at,
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -138,16 +138,16 @@ fun SchoolCard(
             Spacer(modifier = Modifier.height(10.dp))
             
             Text(
-                text = event.title,
+                text = event.title ?: "School Circular",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             
-            if (!event.content.isNullOrBlank()) {
+            if (!event.summary.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = event.content,
+                    text = event.summary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

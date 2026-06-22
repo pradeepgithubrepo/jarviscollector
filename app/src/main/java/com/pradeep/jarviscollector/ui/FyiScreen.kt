@@ -76,7 +76,7 @@ fun FyiScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(events, key = { it.id }) { event ->
+                items(events, key = { it.fyi_event_id }) { event ->
                     FyiCard(event = event)
                 }
             }
@@ -89,7 +89,8 @@ fun FyiCard(
     event: FyiEventEntity,
     modifier: Modifier = Modifier
 ) {
-    val badgeColor = when (event.category.lowercase()) {
+    val categoryName = event.category ?: "OTHER"
+    val badgeColor = when (categoryName.lowercase()) {
         "school" -> Color(0xFF3B82F6)       // Blue
         "family" -> Color(0xFFEC4899)       // Pink
         "deliveries", "delivery" -> Color(0xFFF59E0B)  // Amber
@@ -116,13 +117,12 @@ fun FyiCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Category Badge
                 Surface(
                     shape = RoundedCornerShape(6.dp),
                     color = badgeColor.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text = event.category.uppercase(),
+                        text = categoryName.uppercase(),
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = badgeColor,
@@ -133,10 +133,9 @@ fun FyiCard(
                     )
                 }
                 
-                // Timestamp
-                if (!event.timestamp.isNullOrBlank()) {
+                if (!event.created_at.isNullOrBlank()) {
                     Text(
-                        text = event.timestamp,
+                        text = event.created_at,
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -145,19 +144,17 @@ fun FyiCard(
             
             Spacer(modifier = Modifier.height(10.dp))
             
-            // Title
             Text(
-                text = event.title,
+                text = event.title ?: "Notification Update",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             
-            // Content
-            if (!event.content.isNullOrBlank()) {
+            if (!event.summary.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = event.content,
+                    text = event.summary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

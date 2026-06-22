@@ -1,24 +1,23 @@
 package com.pradeep.jarviscollector
 
 import android.os.Bundle
-
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-
 import androidx.compose.runtime.*
-
 import androidx.lifecycle.lifecycleScope
-
 import com.pradeep.jarviscollector.model.MobileSignal
 import com.pradeep.jarviscollector.model.TodoEntity
 import com.pradeep.jarviscollector.model.FinancialEventEntity
 import com.pradeep.jarviscollector.model.FyiEventEntity
 import com.pradeep.jarviscollector.model.DailyBriefEntity
-
+import com.pradeep.jarviscollector.database.JarvisDatabase
 import com.pradeep.jarviscollector.repository.MobileSignalRepository
 import com.pradeep.jarviscollector.repository.NotificationRepository
-import com.pradeep.jarviscollector.repository.InsightsRepository
-
+import com.pradeep.jarviscollector.repository.TodoRepository
+import com.pradeep.jarviscollector.repository.FinancialRepository
+import com.pradeep.jarviscollector.repository.FYIRepository
+import com.pradeep.jarviscollector.repository.PreferenceRepository
+import com.pradeep.jarviscollector.repository.ActionsRepository
 import com.pradeep.jarviscollector.ui.NotificationScreen
 import com.pradeep.jarviscollector.ui.HomeScreen
 import com.pradeep.jarviscollector.ui.TodoScreen
@@ -27,16 +26,16 @@ import com.pradeep.jarviscollector.ui.FyiScreen
 import com.pradeep.jarviscollector.ui.DailyBriefScreen
 import com.pradeep.jarviscollector.ui.FamilyScreen
 import com.pradeep.jarviscollector.ui.SchoolScreen
+import com.pradeep.jarviscollector.ui.TravelScreen
+import com.pradeep.jarviscollector.ui.HealthScreen
+import com.pradeep.jarviscollector.ui.ShoppingScreen
 import com.pradeep.jarviscollector.ui.theme.JarvisTheme
-
 import com.pradeep.jarviscollector.utils.JsonExporter
 import com.pradeep.jarviscollector.utils.AppPreferences
-
 import com.pradeep.jarviscollector.repository.SmsRepository
 import com.pradeep.jarviscollector.service.JarvisSyncWorkerHelper
 import com.pradeep.jarviscollector.service.SyncService
 import com.pradeep.jarviscollector.service.SyncResult
-
 import kotlinx.coroutines.launch
 
 sealed class Screen {
@@ -47,132 +46,66 @@ sealed class Screen {
     object DailyBrief : Screen()
     object Family : Screen()
     object School : Screen()
+    object Travel : Screen()
+    object Health : Screen()
+    object Shopping : Screen()
     object CollectorSettings : Screen()
 }
 
 class MainActivity : ComponentActivity() {
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-
-        super.onCreate(
-            savedInstanceState
-        )
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
         // Initialize WorkManager background sync schedule
-        JarvisSyncWorkerHelper
-            .initialize(
-                applicationContext
-            )
+        JarvisSyncWorkerHelper.initialize(applicationContext)
 
         // Initialize WorkManager background insights sync schedule
-        com.pradeep.jarviscollector.service.InsightSyncWorkerHelper
-            .initialize(
-                applicationContext
-            )
+        com.pradeep.jarviscollector.service.InsightSyncWorkerHelper.initialize(applicationContext)
 
         // Initialize WorkManager background todo notification reminders schedule
-        com.pradeep.jarviscollector.service.TodoNotificationHelper
-            .initialize(
-                applicationContext
-            )
+        com.pradeep.jarviscollector.service.TodoNotificationHelper.initialize(applicationContext)
 
-        androidx.core.app.ActivityCompat
-            .requestPermissions(
-
-                this,
-
-                arrayOf(
-                    android.Manifest.permission.READ_SMS
-                ),
-
-                101
-            )
+        androidx.core.app.ActivityCompat.requestPermissions(
+            this,
+            arrayOf(android.Manifest.permission.READ_SMS),
+            101
+        )
 
         lifecycleScope.launch {
-
-            val smsSignals =
-                SmsRepository
-                    .readRecentSms(
-                        applicationContext
-                    )
-
-            android.app.AlertDialog
-                .Builder(
-                    this@MainActivity
-                )
-                .setTitle(
-                    "SMS Test"
-                )
-                .setMessage(
-                    "Found ${smsSignals.size} SMS"
-                )
-                .setPositiveButton(
-                    "OK",
-                    null
-                )
-                .show()
+            try {
+                SmsRepository.importRecentSmsToRoom(applicationContext)
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+            }
         }
 
         setContent {
-
-            var currentScreen by remember {
-                mutableStateOf<Screen>(Screen.Home)
-            }
-
-            var todos by remember {
-                mutableStateOf(emptyList<TodoEntity>())
-            }
-
-            var financialEvents by remember {
-                mutableStateOf(emptyList<FinancialEventEntity>())
-            }
-
-            var fyiEvents by remember {
-                mutableStateOf(emptyList<FyiEventEntity>())
-            }
-
-            var latestBrief by remember {
-                mutableStateOf<DailyBriefEntity?>(null)
-            }
-
-            var roomSignals by remember {
-                mutableStateOf(emptyList<MobileSignal>())
-            }
-
-            var exportPath by remember {
-                mutableStateOf("")
-            }
-
-            var isSyncing by remember {
-                mutableStateOf(false)
-            }
-
-            var syncResultMessage by remember {
-                mutableStateOf<String?>(null)
-            }
-
-            var ownerName by remember {
-                mutableStateOf(
-                    AppPreferences.getOwnerName(applicationContext)
-                )
-            }
-
-            var isSyncingInsights by remember {
-                mutableStateOf(false)
-            }
-
-            var insightSyncResultMessage by remember {
-                mutableStateOf<String?>(null)
+            var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
+            var todos by remember { mutableStateOf(emptyList<TodoEntity>()) }
+            var financialEvents by remember { mutableStateOf(emptyList<FinancialEventEntity>()) }
+            var fyiEvents by remember { mutableStateOf(emptyList<FyiEventEntity>()) }
+            var latestBrief by remember { mutableStateOf<DailyBriefEntity?>(null) }
+            var roomSignals by remember { mutableStateOf(emptyList<MobileSignal>()) }
+            var exportPath by remember { mutableStateOf("") }
+            var isSyncing by remember { mutableStateOf(false) }
+            var syncResultMessage by remember { mutableStateOf<String?>(null) }
+            var ownerName by remember { mutableStateOf(AppPreferences.getOwnerName(applicationContext)) }
+            var isSyncingInsights by remember { mutableStateOf(false) }
+            var insightSyncResultMessage by remember { mutableStateOf<String?>(null) }
+            var isBackfilling by remember { mutableStateOf(false) }
+            var backfillStep by remember { mutableStateOf<String?>(null) }
+            var backfillResultMessage by remember { mutableStateOf<String?>(null) }
+            var backfillCompleted by remember {
+                mutableStateOf(AppPreferences.isHistoricalBackfillCompleted(applicationContext))
             }
 
             fun refreshInsights() {
                 lifecycleScope.launch {
-                    todos = InsightsRepository.getTodos(applicationContext)
-                    financialEvents = InsightsRepository.getFinancialEvents(applicationContext)
-                    fyiEvents = InsightsRepository.getFyiEvents(applicationContext)
-                    latestBrief = InsightsRepository.getLatestDailyBrief(applicationContext)
+                    todos = TodoRepository.getTodos(applicationContext)
+                    financialEvents = FinancialRepository.getFinancialEvents(applicationContext)
+                    fyiEvents = FYIRepository.getFyiEvents(applicationContext)
+                    latestBrief = JarvisDatabase.getDatabase(applicationContext).dailyBriefDao().getLatest()
                 }
             }
 
@@ -180,19 +113,25 @@ class MainActivity : ComponentActivity() {
                 refreshInsights()
             }
 
-            val familyEvents = fyiEvents.filter { it.category.lowercase() == "family" }
-            val schoolEvents = fyiEvents.filter { it.category.lowercase() == "school" }
+            val familyEvents = fyiEvents.filter { it.category?.lowercase() == "family" }
+            val schoolEvents = fyiEvents.filter { it.category?.lowercase() == "school" }
+            val travelEvents = fyiEvents.filter { it.category?.lowercase() == "travel" }
+            val healthEvents = fyiEvents.filter { it.category?.lowercase() == "health" }
+            val shoppingEvents = fyiEvents.filter { it.category?.lowercase() == "shopping" || it.category?.lowercase() == "deliveries" }
 
             JarvisTheme {
                 when (currentScreen) {
                     is Screen.Home -> {
                         HomeScreen(
                             ownerName = ownerName,
-                            pendingTodoCount = todos.count { it.status == "pending" },
-                            unpaidBillCount = financialEvents.count { it.status == "upcoming" || it.type.lowercase() == "bill" },
+                            pendingTodoCount = todos.count { it.status == "OPEN" || it.status == "SNOOZED" },
+                            unpaidBillCount = financialEvents.count { it.status?.lowercase() == "upcoming" || it.category?.lowercase() == "bill" },
                             newFyiCount = fyiEvents.size,
                             familyCount = familyEvents.size,
                             schoolCount = schoolEvents.size,
+                            travelCount = travelEvents.size,
+                            healthCount = healthEvents.size,
+                            shoppingCount = shoppingEvents.size,
                             briefDate = latestBrief?.generatedAt,
                             onNavigateToTodos = { currentScreen = Screen.Todos },
                             onNavigateToFinancial = { currentScreen = Screen.Financial },
@@ -200,11 +139,20 @@ class MainActivity : ComponentActivity() {
                             onNavigateToDailyBrief = { currentScreen = Screen.DailyBrief },
                             onNavigateToFamily = { currentScreen = Screen.Family },
                             onNavigateToSchool = { currentScreen = Screen.School },
+                            onNavigateToTravel = { currentScreen = Screen.Travel },
+                            onNavigateToHealth = { currentScreen = Screen.Health },
+                            onNavigateToShopping = { currentScreen = Screen.Shopping },
                             onNavigateToCollectorSettings = { currentScreen = Screen.CollectorSettings },
                             onOwnerNameChange = { newName ->
                                 ownerName = newName
                                 AppPreferences.setOwnerName(applicationContext, newName)
                                 refreshInsights()
+                            },
+                            onLoadInsights = {
+                                lifecycleScope.launch {
+                                    com.pradeep.jarviscollector.service.InsightSyncService.syncInsights(applicationContext)
+                                    refreshInsights()
+                                }
                             }
                         )
                     }
@@ -213,19 +161,19 @@ class MainActivity : ComponentActivity() {
                             todos = todos,
                             onComplete = { todoId ->
                                 lifecycleScope.launch {
-                                    InsightsRepository.markTodoComplete(applicationContext, todoId)
+                                    TodoRepository.markTodoComplete(applicationContext, todoId)
                                     refreshInsights()
                                 }
                             },
                             onSnooze = { todoId ->
                                 lifecycleScope.launch {
-                                    InsightsRepository.snoozeTodo(applicationContext, todoId)
+                                    TodoRepository.snoozeTodo(applicationContext, todoId)
                                     refreshInsights()
                                 }
                             },
                             onDelete = { todoId ->
                                 lifecycleScope.launch {
-                                    InsightsRepository.deleteTodo(applicationContext, todoId)
+                                    TodoRepository.deleteTodo(applicationContext, todoId)
                                     refreshInsights()
                                 }
                             },
@@ -259,6 +207,24 @@ class MainActivity : ComponentActivity() {
                     is Screen.School -> {
                         SchoolScreen(
                             events = schoolEvents,
+                            onBack = { currentScreen = Screen.Home }
+                        )
+                    }
+                    is Screen.Travel -> {
+                        TravelScreen(
+                            events = travelEvents,
+                            onBack = { currentScreen = Screen.Home }
+                        )
+                    }
+                    is Screen.Health -> {
+                        HealthScreen(
+                            events = healthEvents,
+                            onBack = { currentScreen = Screen.Home }
+                        )
+                    }
+                    is Screen.Shopping -> {
+                        ShoppingScreen(
+                            events = shoppingEvents,
                             onBack = { currentScreen = Screen.Home }
                         )
                     }
@@ -323,10 +289,10 @@ class MainActivity : ComponentActivity() {
                                         when (val result = com.pradeep.jarviscollector.service.InsightSyncService.syncInsights(applicationContext)) {
                                             is com.pradeep.jarviscollector.service.InsightSyncResult.Success -> {
                                                 insightSyncResultMessage = "Insights synced successfully!\n\n" +
-                                                        "Daily Briefs: ${result.briefCount}\n" +
                                                         "Todos: ${result.todoCount}\n" +
                                                         "Financials: ${result.financialCount}\n" +
-                                                        "FYIs: ${result.fyiCount}"
+                                                        "FYIs: ${result.fyiCount}\n" +
+                                                        "Preferences: ${result.prefCount}"
                                                 refreshInsights()
                                             }
                                             is com.pradeep.jarviscollector.service.InsightSyncResult.Failure -> {
@@ -337,6 +303,64 @@ class MainActivity : ComponentActivity() {
                                         insightSyncResultMessage = "Error: ${ex.message}"
                                     } finally {
                                         isSyncingInsights = false
+                                    }
+                                }
+                            },
+                            isBackfilling = isBackfilling,
+                            backfillStep = backfillStep,
+                            backfillResultMessage = backfillResultMessage,
+                            backfillCompleted = backfillCompleted,
+                            onDismissBackfillResult = { backfillResultMessage = null },
+                            onRunAgain = {
+                                AppPreferences.setHistoricalBackfillCompleted(applicationContext, false)
+                                backfillCompleted = false
+                            },
+                            onStartBackfill = {
+                                lifecycleScope.launch {
+                                    isBackfilling = true
+                                    backfillStep = "Exporting WhatsApp History..."
+                                    try {
+                                        val whatsappSignals = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            MobileSignalRepository.getSignalsBySource(applicationContext, "whatsapp")
+                                        }
+                                        val whatsappCount = whatsappSignals.size
+                                        val whatsappJson = JsonExporter.exportHistoricalSignalsAsString(whatsappSignals)
+
+                                        backfillStep = "Exporting SMS History..."
+                                        val oneYearAgo = System.currentTimeMillis() - (365L * 24 * 60 * 60 * 1000L)
+                                        val smsSignals = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            SmsRepository.readRecentSms(applicationContext, oneYearAgo)
+                                        }
+                                        val smsCount = smsSignals.size
+                                        val smsJson = JsonExporter.exportHistoricalSignalsAsString(smsSignals)
+
+                                        backfillStep = "Uploading Historical Files..."
+                                        val timestamp = System.currentTimeMillis()
+                                        val whatsappFile = "${ownerName}/historical/${ownerName}_whatsapp_historical_${timestamp}.json"
+                                        val smsFile = "${ownerName}/historical/${ownerName}_sms_historical_${timestamp}.json"
+
+                                        val (resWhatsapp, resSms) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            val w = com.pradeep.jarviscollector.network.SupabaseUploader.uploadJson(whatsappFile, whatsappJson)
+                                            val s = com.pradeep.jarviscollector.network.SupabaseUploader.uploadJson(smsFile, smsJson)
+                                            Pair(w, s)
+                                        }
+
+                                        if ((resWhatsapp.contains("HTTP: 200") || resWhatsapp.contains("HTTP: 201")) &&
+                                            (resSms.contains("HTTP: 200") || resSms.contains("HTTP: 201"))) {
+                                            
+                                            backfillStep = "Historical Backfill Complete"
+                                            AppPreferences.setHistoricalBackfillCompleted(applicationContext, true)
+                                            backfillCompleted = true
+                                            
+                                            backfillResultMessage = "WhatsApp Records: $whatsappCount\n\nSMS Records: $smsCount\n\nFiles Uploaded: 2"
+                                        } else {
+                                            backfillResultMessage = "Historical Backfill Failed during upload:\n\nWhatsApp upload result: $resWhatsapp\n\nSMS upload result: $resSms"
+                                        }
+                                    } catch (ex: Exception) {
+                                        backfillResultMessage = "Historical Backfill Failed:\n\n${ex.message}"
+                                    } finally {
+                                        isBackfilling = false
+                                        backfillStep = null
                                     }
                                 }
                             }

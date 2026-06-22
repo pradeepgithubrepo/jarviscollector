@@ -37,9 +37,9 @@ fun TodoScreen(
     val tabTitles = listOf("Pending", "Completed", "Due Scheduled")
 
     val filteredTodos = when (selectedTab) {
-        0 -> todos.filter { it.status == "pending" }
-        1 -> todos.filter { it.status == "completed" }
-        2 -> todos.filter { it.status == "pending" && !it.dueDate.isNullOrBlank() }
+        0 -> todos.filter { it.status == "OPEN" || it.status == "SNOOZED" }
+        1 -> todos.filter { it.status == "COMPLETED" }
+        2 -> todos.filter { (it.status == "OPEN" || it.status == "SNOOZED") && !it.due_date.isNullOrBlank() }
         else -> todos
     }
 
@@ -48,7 +48,6 @@ fun TodoScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Premium AppBar
         TopAppBar(
             title = {
                 Text(
@@ -71,7 +70,6 @@ fun TodoScreen(
             )
         )
 
-        // Tab Row selectors
         TabRow(
             selectedTabIndex = selectedTab,
             containerColor = Color.Transparent,
@@ -123,12 +121,12 @@ fun TodoScreen(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(filteredTodos, key = { it.id }) { todo ->
+                items(filteredTodos, key = { it.todo_id }) { todo ->
                     TodoCard(
                         todo = todo,
-                        onComplete = { onComplete(todo.id) },
-                        onSnooze = { onSnooze(todo.id) },
-                        onDelete = { onDelete(todo.id) }
+                        onComplete = { onComplete(todo.todo_id) },
+                        onSnooze = { onSnooze(todo.todo_id) },
+                        onDelete = { onDelete(todo.todo_id) }
                     )
                 }
             }
@@ -144,7 +142,7 @@ fun TodoCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isCompleted = todo.status == "completed"
+    val isCompleted = todo.status == "COMPLETED"
     
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -168,7 +166,6 @@ fun TodoCard(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    // Priority Badge
                     if (!todo.priority.isNullOrBlank()) {
                         val badgeColor = when (todo.priority.lowercase()) {
                             "high" -> Color(0xFFEF4444)
@@ -190,16 +187,14 @@ fun TodoCard(
                         }
                     }
 
-                    // Title
                     Text(
-                        text = todo.title,
+                        text = todo.title ?: "Untitled Task",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         textDecoration = if (isCompleted) TextDecoration.LineThrough else null,
                         color = if (isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
                     )
 
-                    // Description
                     if (!todo.description.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -214,36 +209,25 @@ fun TodoCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Metadata footer
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Due Date & Snooze Info
                 Column {
-                    if (!todo.dueDate.isNullOrBlank()) {
+                    if (!todo.due_date.isNullOrBlank()) {
                         Text(
-                            text = "Due: ${todo.dueDate}",
+                            text = "Due: ${todo.due_date}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    if (todo.snoozeCount > 0) {
-                        Text(
-                            text = "Snoozed ${todo.snoozeCount} times",
-                            fontSize = 10.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
 
-                // Action Buttons
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Snooze Button
                     if (!isCompleted) {
                         IconButton(
                             onClick = onSnooze,
@@ -261,7 +245,6 @@ fun TodoCard(
                         }
                     }
 
-                    // Complete/Check Button
                     IconButton(
                         onClick = onComplete,
                         colors = IconButtonDefaults.iconButtonColors(
@@ -277,7 +260,6 @@ fun TodoCard(
                         )
                     }
 
-                    // Delete Button
                     IconButton(
                         onClick = onDelete,
                         colors = IconButtonDefaults.iconButtonColors(

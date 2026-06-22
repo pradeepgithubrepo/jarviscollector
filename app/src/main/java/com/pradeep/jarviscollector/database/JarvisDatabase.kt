@@ -1,82 +1,61 @@
 package com.pradeep.jarviscollector.database
 
-
 import android.content.Context
-
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-
 import com.pradeep.jarviscollector.model.MobileSignal
 import com.pradeep.jarviscollector.model.TodoEntity
 import com.pradeep.jarviscollector.model.FinancialEventEntity
 import com.pradeep.jarviscollector.model.FyiEventEntity
+import com.pradeep.jarviscollector.model.UserPreferenceEntity
+import com.pradeep.jarviscollector.model.UserActionEntity
+import com.pradeep.jarviscollector.model.SignalEntity
+import com.pradeep.jarviscollector.model.FactEntity
+import com.pradeep.jarviscollector.model.MerchantMappingEntity
 import com.pradeep.jarviscollector.model.DailyBriefEntity
 
-
 @Database(
-
     entities = [
         MobileSignal::class,
         TodoEntity::class,
         FinancialEventEntity::class,
         FyiEventEntity::class,
+        UserPreferenceEntity::class,
+        UserActionEntity::class,
+        SignalEntity::class,
+        FactEntity::class,
+        MerchantMappingEntity::class,
         DailyBriefEntity::class
     ],
-
-    version = 2
+    version = 3,
+    exportSchema = false
 )
+abstract class JarvisDatabase : RoomDatabase() {
 
-abstract class JarvisDatabase :
-    RoomDatabase() {
-
-
-    abstract fun mobileSignalDao():
-            MobileSignalDao
-
+    abstract fun mobileSignalDao(): MobileSignalDao
     abstract fun todoDao(): TodoDao
     abstract fun financialEventDao(): FinancialEventDao
     abstract fun fyiEventDao(): FyiEventDao
+    abstract fun userPreferenceDao(): UserPreferenceDao
+    abstract fun userActionDao(): UserActionDao
     abstract fun dailyBriefDao(): DailyBriefDao
 
-
     companion object {
+        private var INSTANCE: JarvisDatabase? = null
 
-
-        private var INSTANCE:
-                JarvisDatabase? = null
-
-
-
-        fun getDatabase(
-            context: Context
-        ): JarvisDatabase {
-
-
-            return INSTANCE
-                ?: synchronized(this) {
-
-
-                    val instance =
-                        Room.databaseBuilder(
-
-                            context.applicationContext,
-
-                            JarvisDatabase::class.java,
-
-                            "jarvis_mobile.db"
-
-                        )
-                            .fallbackToDestructiveMigration()
-                            .build()
-
-
-                    INSTANCE =
-                        instance
-
-
-                    instance
-                }
+        fun getDatabase(context: Context): JarvisDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    JarvisDatabase::class.java,
+                    "jarvis_mobile.db"
+                )
+                .fallbackToDestructiveMigration()
+                .build()
+                INSTANCE = instance
+                instance
+            }
         }
     }
 }

@@ -173,4 +173,16 @@ object MobileSignalRepository {
         }
     }
 
+    suspend fun getSignalsBySource(
+        context: Context,
+        source: String
+    ): List<MobileSignal> {
+        return withContext(Dispatchers.IO) {
+            JarvisDatabase
+                .getDatabase(context)
+                .mobileSignalDao()
+                .getSignalsBySource(source)
+        }
+    }
+
 }

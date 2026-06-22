@@ -20,7 +20,7 @@ object SmsRepository {
             mutableListOf<MobileSignal>()
 
         try {
-            val selection = "${Telephony.Sms.DATE} > ?"
+                        val selection = "${Telephony.Sms.DATE} > ?"
             val selectionArgs = arrayOf(sinceTimestamp.toString())
 
             val cursor =
