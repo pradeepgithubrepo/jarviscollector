@@ -20,11 +20,30 @@ import com.pradeep.jarviscollector.model.FyiEventEntity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HealthScreen(
+fun FyiCategoryScreen(
+    category: String,
     events: List<FyiEventEntity>,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val cleanCategory = category.trim().lowercase()
+    val (title, tagText, accentColor) = when (cleanCategory) {
+        "family" -> Triple("Family Agent", "FAMILY UPDATE", Color(0xFFEC4899))
+        "school" -> Triple("School Agent", "SCHOOL UPDATE", Color(0xFF3B82F6))
+        "travel" -> Triple("Travel Agent", "TRAVEL UPDATE", Color(0xFF06B6D4))
+        "health" -> Triple("Health Agent", "HEALTH UPDATE", Color(0xFFEF4444))
+        else -> Triple("Shopping Agent", "SHOPPING UPDATE", Color(0xFFF59E0B))
+    }
+
+    val filteredEvents = events.filter {
+        val eventCat = it.category?.trim()?.lowercase() ?: ""
+        if (cleanCategory == "shopping") {
+            eventCat == "shopping" || eventCat == "deliveries"
+        } else {
+            eventCat == cleanCategory
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -33,7 +52,7 @@ fun HealthScreen(
         TopAppBar(
             title = {
                 Text(
-                    text = "Health Agent",
+                    text = title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
                 )
@@ -52,7 +71,7 @@ fun HealthScreen(
             )
         )
 
-        if (events.isEmpty()) {
+        if (filteredEvents.isEmpty()) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -60,7 +79,7 @@ fun HealthScreen(
                     .weight(1f)
             ) {
                 Text(
-                    text = "No health alerts or logs found.",
+                    text = "No $cleanCategory updates found.",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                 )
@@ -76,8 +95,8 @@ fun HealthScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(events, key = { it.fyi_event_id }) { event ->
-                    HealthCard(event = event)
+                items(filteredEvents, key = { it.fyi_event_id }) { event ->
+                    FyiCategoryCard(event = event, tagText = tagText, accentColor = accentColor)
                 }
             }
         }
@@ -85,12 +104,12 @@ fun HealthScreen(
 }
 
 @Composable
-fun HealthCard(
+fun FyiCategoryCard(
     event: FyiEventEntity,
+    tagText: String,
+    accentColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val accentColor = Color(0xFFEF4444) // Red accent for Health Agent
-    
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
@@ -115,7 +134,7 @@ fun HealthCard(
                     color = accentColor.copy(alpha = 0.15f)
                 ) {
                     Text(
-                        text = "HEALTH ALERT",
+                        text = tagText,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
                         color = accentColor,
@@ -138,7 +157,7 @@ fun HealthCard(
             Spacer(modifier = Modifier.height(10.dp))
             
             Text(
-                text = event.title ?: "Health Alert",
+                text = event.title ?: "Update",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface

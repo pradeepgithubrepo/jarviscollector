@@ -24,11 +24,6 @@ import com.pradeep.jarviscollector.ui.TodoScreen
 import com.pradeep.jarviscollector.ui.FinancialScreen
 import com.pradeep.jarviscollector.ui.FyiScreen
 import com.pradeep.jarviscollector.ui.DailyBriefScreen
-import com.pradeep.jarviscollector.ui.FamilyScreen
-import com.pradeep.jarviscollector.ui.SchoolScreen
-import com.pradeep.jarviscollector.ui.TravelScreen
-import com.pradeep.jarviscollector.ui.HealthScreen
-import com.pradeep.jarviscollector.ui.ShoppingScreen
 import com.pradeep.jarviscollector.ui.theme.JarvisTheme
 import com.pradeep.jarviscollector.utils.JsonExporter
 import com.pradeep.jarviscollector.utils.AppPreferences

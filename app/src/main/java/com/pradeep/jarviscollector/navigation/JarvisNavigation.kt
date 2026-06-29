@@ -149,13 +149,11 @@ fun JarvisNavHost(
 
         composable(Screen.FyiCategory.route) { backStackEntry ->
             val category = backStackEntry.arguments?.getString("category")?.lowercase() ?: ""
-            when (category) {
-                "family" -> FamilyScreen(events = familyEvents, onBack = { navController.popBackStack() })
-                "school" -> SchoolScreen(events = schoolEvents, onBack = { navController.popBackStack() })
-                "travel" -> TravelScreen(events = travelEvents, onBack = { navController.popBackStack() })
-                "health" -> HealthScreen(events = healthEvents, onBack = { navController.popBackStack() })
-                else -> ShoppingScreen(events = shoppingEvents, onBack = { navController.popBackStack() })
-            }
+            FyiCategoryScreen(
+                category = category,
+                events = fyiEvents,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.NotificationDetail.route) { backStackEntry ->
