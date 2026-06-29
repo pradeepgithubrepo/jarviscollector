@@ -8,6 +8,7 @@ import com.pradeep.jarviscollector.model.TodoEntity
 import com.pradeep.jarviscollector.model.FinancialEventEntity
 import com.pradeep.jarviscollector.model.FyiEventEntity
 import com.pradeep.jarviscollector.model.UserPreferenceEntity
+import com.pradeep.jarviscollector.model.DailyBriefEntity
 import com.pradeep.jarviscollector.network.JarvisInsightsClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -167,6 +168,65 @@ object InsightSyncService {
                         Log.e(TAG, "Error syncing user preferences", e)
                     }
                 }
+
+                // 5. Generate Daily Brief locally from synced data
+                try {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                    val currentDateStr = sdf.format(java.util.Date())
+                    val briefItems = JSONArray()
+
+                    // Pending tasks summary
+                    val pendingTodos = db.todoDao().getPending()
+                    val todoBrief = JSONObject()
+                    todoBrief.put("title", "PENDING TASKS")
+                    if (pendingTodos.isEmpty()) {
+                        todoBrief.put("content", "You are all caught up on your tasks for today! No pending items.")
+                    } else {
+                        val titles = pendingTodos.take(3).joinToString { it.title ?: "Untitled" }
+                        val suffix = if (pendingTodos.size > 3) " and ${pendingTodos.size - 3} more" else ""
+                        todoBrief.put("content", "You have ${pendingTodos.size} open tasks. Major items: $titles$suffix.")
+                    }
+                    briefItems.put(todoBrief)
+
+                    // Financial summary
+                    val financialList = db.financialEventDao().getAll()
+                    val upcomingBills = financialList.filter { it.status?.lowercase() == "upcoming" || it.category?.lowercase() == "bill" }
+                    val financialBrief = JSONObject()
+                    financialBrief.put("title", "FINANCIAL REMINDERS")
+                    if (upcomingBills.isEmpty()) {
+                        financialBrief.put("content", "No upcoming bill payments or transactions detected.")
+                    } else {
+                        val totalAmount = upcomingBills.sumOf { it.amount ?: 0.0 }
+                        val titles = upcomingBills.take(2).joinToString { it.merchant ?: "Merchant" }
+                        financialBrief.put("content", "You have ${upcomingBills.size} upcoming bills (totaling ₹${String.format("%.2f", totalAmount)}). Key payments: $titles.")
+                    }
+                    briefItems.put(financialBrief)
+
+                    // FYI circulars summary
+                    val fyiList = db.fyiEventDao().getAll()
+                    val fyiBrief = JSONObject()
+                    fyiBrief.put("title", "UPDATES & CIRCULARS")
+                    if (fyiList.isEmpty()) {
+                        fyiBrief.put("content", "No new notifications or circulars found today.")
+                    } else {
+                        val school = fyiList.count { it.category?.lowercase() == "school" }
+                        val family = fyiList.count { it.category?.lowercase() == "family" }
+                        val other = fyiList.size - school - family
+                        fyiBrief.put("content", "Received ${fyiList.size} new updates today: $school school circulars, $family family updates, and $other other notifications.")
+                    }
+                    briefItems.put(fyiBrief)
+
+                    val briefEntity = DailyBriefEntity(
+                        id = currentDateStr,
+                        generatedAt = currentDateStr,
+                        version = "1.0",
+                        itemsJson = briefItems.toString()
+                    )
+                    db.dailyBriefDao().deleteAll()
+                    db.dailyBriefDao().insert(briefEntity)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error generating daily brief", e)
+                }
             }
 
             Log.d(
@@ -175,7 +235,7 @@ object InsightSyncService {
             )
 
             InsightSyncResult.Success(
-                briefCount = 0,
+                briefCount = 1,
                 todoCount = todoCount,
                 financialCount = financialCount,
                 fyiCount = fyiCount,

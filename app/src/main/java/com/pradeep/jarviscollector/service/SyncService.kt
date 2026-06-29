@@ -53,7 +53,7 @@ object SyncService {
                     .getOwnerName(context)
 
             val fileName =
-                "$ownerName/${ownerName}_${System.currentTimeMillis()}.json"
+                "incoming/${ownerName}_${System.currentTimeMillis()}.json"
 
             val uploadResult =
                 SupabaseUploader

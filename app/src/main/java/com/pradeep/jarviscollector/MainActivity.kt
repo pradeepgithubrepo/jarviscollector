@@ -315,55 +315,77 @@ class MainActivity : ComponentActivity() {
                                 AppPreferences.setHistoricalBackfillCompleted(applicationContext, false)
                                 backfillCompleted = false
                             },
-                            onStartBackfill = {
-                                lifecycleScope.launch {
-                                    isBackfilling = true
-                                    backfillStep = "Exporting WhatsApp History..."
-                                    try {
-                                        val whatsappSignals = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                            MobileSignalRepository.getSignalsBySource(applicationContext, "whatsapp")
-                                        }
-                                        val whatsappCount = whatsappSignals.size
-                                        val whatsappJson = JsonExporter.exportHistoricalSignalsAsString(whatsappSignals)
+                             onStartBackfill = {
+                                 lifecycleScope.launch {
+                                     isBackfilling = true
+                                     try {
+                                         backfillStep = "Gathering WhatsApp History..."
+                                         val whatsappSignals = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                             MobileSignalRepository.getSignalsBySource(applicationContext, "whatsapp") +
+                                             MobileSignalRepository.getSignalsBySource(applicationContext, "whatsapp_business")
+                                         }
+                                         val whatsappCount = whatsappSignals.size
+                                         val whatsappJson = JsonExporter.exportSignalsAsString(whatsappSignals)
 
-                                        backfillStep = "Exporting SMS History..."
-                                        val oneYearAgo = System.currentTimeMillis() - (365L * 24 * 60 * 60 * 1000L)
-                                        val smsSignals = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                            SmsRepository.readRecentSms(applicationContext, oneYearAgo)
-                                        }
-                                        val smsCount = smsSignals.size
-                                        val smsJson = JsonExporter.exportHistoricalSignalsAsString(smsSignals)
+                                         backfillStep = "Scraping SMS History (Last 3 Months)..."
+                                         val threeMonthsAgo = System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000L)
+                                         val smsSignals = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                             SmsRepository.readRecentSms(applicationContext, threeMonthsAgo)
+                                         }
+                                         val smsCount = smsSignals.size
 
-                                        backfillStep = "Uploading Historical Files..."
-                                        val timestamp = System.currentTimeMillis()
-                                        val whatsappFile = "${ownerName}/historical/${ownerName}_whatsapp_historical_${timestamp}.json"
-                                        val smsFile = "${ownerName}/historical/${ownerName}_sms_historical_${timestamp}.json"
+                                         // Save all SMS signals to Room first (if they don't exist)
+                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                             smsSignals.forEach { signal ->
+                                                 if (!MobileSignalRepository.exists(applicationContext, signal)) {
+                                                     MobileSignalRepository.save(applicationContext, signal)
+                                                 }
+                                             }
+                                         }
 
-                                        val (resWhatsapp, resSms) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                            val w = com.pradeep.jarviscollector.network.SupabaseUploader.uploadJson(whatsappFile, whatsappJson)
-                                            val s = com.pradeep.jarviscollector.network.SupabaseUploader.uploadJson(smsFile, smsJson)
-                                            Pair(w, s)
-                                        }
+                                         // Retrieve all SMS signals from Room from the last 3 months
+                                         val localSmsSignals = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                             MobileSignalRepository.getSignalsBySource(applicationContext, "sms")
+                                                 .filter { it.timestamp >= threeMonthsAgo }
+                                         }
+                                         val smsJson = JsonExporter.exportSignalsAsString(localSmsSignals)
 
-                                        if ((resWhatsapp.contains("HTTP: 200") || resWhatsapp.contains("HTTP: 201")) &&
-                                            (resSms.contains("HTTP: 200") || resSms.contains("HTTP: 201"))) {
-                                            
-                                            backfillStep = "Historical Backfill Complete"
-                                            AppPreferences.setHistoricalBackfillCompleted(applicationContext, true)
-                                            backfillCompleted = true
-                                            
-                                            backfillResultMessage = "WhatsApp Records: $whatsappCount\n\nSMS Records: $smsCount\n\nFiles Uploaded: 2"
-                                        } else {
-                                            backfillResultMessage = "Historical Backfill Failed during upload:\n\nWhatsApp upload result: $resWhatsapp\n\nSMS upload result: $resSms"
-                                        }
-                                    } catch (ex: Exception) {
-                                        backfillResultMessage = "Historical Backfill Failed:\n\n${ex.message}"
-                                    } finally {
-                                        isBackfilling = false
-                                        backfillStep = null
-                                    }
-                                }
-                            }
+                                         backfillStep = "Uploading Historical Files..."
+                                         val timestamp = System.currentTimeMillis()
+                                         val whatsappFile = "incoming/${ownerName}_whatsapp_${timestamp}.json"
+                                         val smsFile = "incoming/${ownerName}_sms_${timestamp}.json"
+
+                                         val (resWhatsapp, resSms) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                             val w = com.pradeep.jarviscollector.network.SupabaseUploader.uploadJson(whatsappFile, whatsappJson)
+                                             val s = com.pradeep.jarviscollector.network.SupabaseUploader.uploadJson(smsFile, smsJson)
+                                             Pair(w, s)
+                                         }
+
+                                         if ((resWhatsapp.contains("HTTP: 200") || resWhatsapp.contains("HTTP: 201")) &&
+                                             (resSms.contains("HTTP: 200") || resSms.contains("HTTP: 201"))) {
+
+                                             // Mark uploaded signals as SYNCED locally
+                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                                 val whatsappIds = whatsappSignals.map { it.id }
+                                                 val smsIds = localSmsSignals.map { it.id }
+                                                 MobileSignalRepository.markSynced(applicationContext, whatsappIds + smsIds)
+                                             }
+
+                                             backfillStep = "Historical Backfill Complete"
+                                             AppPreferences.setHistoricalBackfillCompleted(applicationContext, true)
+                                             backfillCompleted = true
+                                             backfillResultMessage = "Successfully uploaded historical dumps to Supabase Storage jarvis-signals bucket!\n\nWhatsApp Records: $whatsappCount\n\nSMS Records: $smsCount"
+                                         } else {
+                                             backfillResultMessage = "Historical Backfill Failed during upload:\n\nWhatsApp upload result: $resWhatsapp\n\nSMS upload result: $resSms"
+                                         }
+                                     } catch (ex: Exception) {
+                                         backfillResultMessage = "Historical Backfill Failed:\n\n${ex.message}"
+                                     } finally {
+                                         isBackfilling = false
+                                         backfillStep = null
+                                     }
+                                 }
+                             }
                         )
                     }
                 }

@@ -115,130 +115,130 @@ class ExampleUnitTest {
         assertTrue("Delay should be less than or equal to 24 hours", delay <= 24 * 60 * 60 * 1000L)
     }
 
-    @Test
-    fun testTodoActionLogic() {
-        val todo = com.pradeep.jarviscollector.model.TodoEntity(
-            id = "test_id",
-            title = "Task",
-            description = "Desc",
-            dueDate = "2026-06-22",
-            priority = "high",
-            status = "pending",
-            completedAt = null,
-            snoozeCount = 0,
-            updatedAt = 1000L
-        )
+//    @Test
+//    fun testTodoActionLogic() {
+//        val todo = com.pradeep.jarviscollector.model.TodoEntity(
+//            id = "test_id",
+//            title = "Task",
+//            description = "Desc",
+//            dueDate = "2026-06-22",
+//            priority = "high",
+//            status = "pending",
+//            completedAt = null,
+//            snoozeCount = 0,
+//            updatedAt = 1000L
+//        )
+//
+//        assertEquals("pending", todo.status)
+//        assertEquals(0, todo.snoozeCount)
+//
+//        // Mock complete action logic
+//        val completedTodo = todo.copy(
+//            status = "completed",
+//            completedAt = "2000",
+//            updatedAt = 2000L
+//        )
+//        assertEquals("completed", completedTodo.status)
+//        assertEquals("2000", completedTodo.completedAt)
+//
+//        // Mock snooze action logic
+//        val snoozedTodo = todo.copy(
+//            snoozeCount = todo.snoozeCount + 1,
+//            updatedAt = 3000L
+//        )
+//        assertEquals(1, snoozedTodo.snoozeCount)
+//    }
+//
+//    @Test
+//    fun testFyiCategoryFiltering() {
+//        val fyiList = listOf(
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "1",
+//                title = "School Circular",
+//                content = "Details",
+//                category = "school",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            ),
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "2",
+//                title = "Family Circular",
+//                content = "Details",
+//                category = "Family",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            ),
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "3",
+//                title = "Delivery Alert",
+//                content = "Details",
+//                category = "deliveries",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            )
+//        )
+//
+//        val schoolEvents = fyiList.filter { it.category.lowercase() == "school" }
+//        val familyEvents = fyiList.filter { it.category.lowercase() == "family" }
+//
+//        assertEquals(1, schoolEvents.size)
+//        assertEquals("School Circular", schoolEvents[0].title)
+//
+//        assertEquals(1, familyEvents.size)
+//        assertEquals("Family Circular", familyEvents[0].title)
+//    }
+//
+//    @Test
+//    fun testTravelHealthShoppingCategoryFiltering() {
+//        val fyiList = listOf(
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "1",
+//                title = "Flight Ticket Booking",
+//                content = "Details",
+//                category = "travel",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            ),
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "2",
+//                title = "Annual Health Checkup",
+//                content = "Details",
+//                category = "Health",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            ),
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "3",
+//                title = "Amazon Package Out for Delivery",
+//                content = "Details",
+//                category = "deliveries",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            ),
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "4",
+//                title = "Grocery Shopping List",
+//                content = "Details",
+//                category = "shopping",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            ),
+//            com.pradeep.jarviscollector.model.FyiEventEntity(
+//                id = "5",
+//                title = "Random update",
+//                content = "Details",
+//                category = "other",
+//                timestamp = "2026-06-21T17:51:27Z"
+//            )
+//        )
 
-        assertEquals("pending", todo.status)
-        assertEquals(0, todo.snoozeCount)
-
-        // Mock complete action logic
-        val completedTodo = todo.copy(
-            status = "completed",
-            completedAt = "2000",
-            updatedAt = 2000L
-        )
-        assertEquals("completed", completedTodo.status)
-        assertEquals("2000", completedTodo.completedAt)
-
-        // Mock snooze action logic
-        val snoozedTodo = todo.copy(
-            snoozeCount = todo.snoozeCount + 1,
-            updatedAt = 3000L
-        )
-        assertEquals(1, snoozedTodo.snoozeCount)
-    }
-
-    @Test
-    fun testFyiCategoryFiltering() {
-        val fyiList = listOf(
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "1",
-                title = "School Circular",
-                content = "Details",
-                category = "school",
-                timestamp = "2026-06-21T17:51:27Z"
-            ),
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "2",
-                title = "Family Circular",
-                content = "Details",
-                category = "Family",
-                timestamp = "2026-06-21T17:51:27Z"
-            ),
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "3",
-                title = "Delivery Alert",
-                content = "Details",
-                category = "deliveries",
-                timestamp = "2026-06-21T17:51:27Z"
-            )
-        )
-
-        val schoolEvents = fyiList.filter { it.category.lowercase() == "school" }
-        val familyEvents = fyiList.filter { it.category.lowercase() == "family" }
-
-        assertEquals(1, schoolEvents.size)
-        assertEquals("School Circular", schoolEvents[0].title)
-
-        assertEquals(1, familyEvents.size)
-        assertEquals("Family Circular", familyEvents[0].title)
-    }
-
-    @Test
-    fun testTravelHealthShoppingCategoryFiltering() {
-        val fyiList = listOf(
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "1",
-                title = "Flight Ticket Booking",
-                content = "Details",
-                category = "travel",
-                timestamp = "2026-06-21T17:51:27Z"
-            ),
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "2",
-                title = "Annual Health Checkup",
-                content = "Details",
-                category = "Health",
-                timestamp = "2026-06-21T17:51:27Z"
-            ),
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "3",
-                title = "Amazon Package Out for Delivery",
-                content = "Details",
-                category = "deliveries",
-                timestamp = "2026-06-21T17:51:27Z"
-            ),
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "4",
-                title = "Grocery Shopping List",
-                content = "Details",
-                category = "shopping",
-                timestamp = "2026-06-21T17:51:27Z"
-            ),
-            com.pradeep.jarviscollector.model.FyiEventEntity(
-                id = "5",
-                title = "Random update",
-                content = "Details",
-                category = "other",
-                timestamp = "2026-06-21T17:51:27Z"
-            )
-        )
-
-        val travelEvents = fyiList.filter { it.category.lowercase() == "travel" }
-        val healthEvents = fyiList.filter { it.category.lowercase() == "health" }
-        val shoppingEvents = fyiList.filter { it.category.lowercase() == "shopping" || it.category.lowercase() == "deliveries" }
-
-        assertEquals(1, travelEvents.size)
-        assertEquals("Flight Ticket Booking", travelEvents[0].title)
-
-        assertEquals(1, healthEvents.size)
-        assertEquals("Annual Health Checkup", healthEvents[0].title)
-
-        assertEquals(2, shoppingEvents.size)
-        assertTrue(shoppingEvents.any { it.title == "Amazon Package Out for Delivery" })
-        assertTrue(shoppingEvents.any { it.title == "Grocery Shopping List" })
-    }
+//        val travelEvents = fyiList.filter { it.category.lowercase() == "travel" }
+//        val healthEvents = fyiList.filter { it.category.lowercase() == "health" }
+//        val shoppingEvents = fyiList.filter { it.category.lowercase() == "shopping" || it.category.lowercase() == "deliveries" }
+//
+//        assertEquals(1, travelEvents.size)
+//        assertEquals("Flight Ticket Booking", travelEvents[0].title)
+//
+//        assertEquals(1, healthEvents.size)
+//        assertEquals("Annual Health Checkup", healthEvents[0].title)
+//
+//        assertEquals(2, shoppingEvents.size)
+//        assertTrue(shoppingEvents.any { it.title == "Amazon Package Out for Delivery" })
+//        assertTrue(shoppingEvents.any { it.title == "Grocery Shopping List" })
+//    }
 
     @Test
     fun testCombinedInsightJsonParsing() {

@@ -92,9 +92,9 @@ object SmsRepository {
         val lastImportTime = com.pradeep.jarviscollector.utils.AppPreferences
             .getLastSmsImportTimestamp(context)
 
-        // If first import, look back 24 hours
+        // If first import, look back 90 days (3 months)
         val sinceTime = if (lastImportTime == 0L) {
-            System.currentTimeMillis() - (24 * 60 * 60 * 1000L)
+            System.currentTimeMillis() - (90L * 24 * 60 * 60 * 1000L)
         } else {
             lastImportTime
         }

@@ -122,7 +122,7 @@ class JarvisNotificationListener :
                         message = message,
 
                         timestamp =
-                            System.currentTimeMillis()
+                            sbn.postTime
                     )
                 )
 
@@ -160,7 +160,7 @@ class JarvisNotificationListener :
                                 message,
 
                             timestamp =
-                                System.currentTimeMillis()
+                                sbn.postTime
                         )
                     )
             }
