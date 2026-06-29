@@ -59,37 +59,7 @@ data class UserActionEntity(
     val metadata: String? // JSON string
 )
 
-@Entity(tableName = "signals")
-data class SignalEntity(
-    @PrimaryKey val signal_id: String,
-    val source: String?,
-    val sender: String?,
-    val message: String?,
-    val signal_timestamp: String?,
-    val created_at: String?,
-    val raw_signal_id: String?,
-    val metadata: String? // JSON string
-)
 
-@Entity(tableName = "facts")
-data class FactEntity(
-    @PrimaryKey val fact_id: String,
-    val entity: String?,
-    val fact: String?,
-    val confidence: Double?,
-    val source_signal_id: String?,
-    val created_at: String?
-)
-
-@Entity(tableName = "merchant_mappings")
-data class MerchantMappingEntity(
-    @PrimaryKey val mapping_id: String,
-    val merchant_name: String?,
-    val category: String?,
-    val confidence: Double?,
-    val created_at: String?,
-    val updated_at: String?
-)
 
 @Entity(tableName = "daily_briefs")
 data class DailyBriefEntity(

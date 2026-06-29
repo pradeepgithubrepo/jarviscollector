@@ -10,9 +10,6 @@ import com.pradeep.jarviscollector.model.FinancialEventEntity
 import com.pradeep.jarviscollector.model.FyiEventEntity
 import com.pradeep.jarviscollector.model.UserPreferenceEntity
 import com.pradeep.jarviscollector.model.UserActionEntity
-import com.pradeep.jarviscollector.model.SignalEntity
-import com.pradeep.jarviscollector.model.FactEntity
-import com.pradeep.jarviscollector.model.MerchantMappingEntity
 import com.pradeep.jarviscollector.model.DailyBriefEntity
 
 @Database(
@@ -23,9 +20,6 @@ import com.pradeep.jarviscollector.model.DailyBriefEntity
         FyiEventEntity::class,
         UserPreferenceEntity::class,
         UserActionEntity::class,
-        SignalEntity::class,
-        FactEntity::class,
-        MerchantMappingEntity::class,
         DailyBriefEntity::class
     ],
     version = 3,
