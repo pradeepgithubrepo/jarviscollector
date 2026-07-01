@@ -12,6 +12,7 @@ import org.json.JSONObject
 import java.util.UUID
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlinx.coroutines.flow.Flow
 import java.util.Date
 
 object ActionsRepository {
@@ -19,13 +20,21 @@ object ActionsRepository {
     private const val TAG = "ActionsRepository"
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    fun logAction(
+    suspend fun getActions(context: Context): List<UserActionEntity> {
+        return JarvisDatabase.getDatabase(context).userActionDao().getAll()
+    }
+
+    fun getActionsFlow(context: Context): Flow<List<UserActionEntity>> {
+        return JarvisDatabase.getDatabase(context).userActionDao().getAllFlow()
+    }
+
+    suspend fun logAction(
         context: Context,
         entityType: String,
         entityId: String,
         action: String,
         metadata: JSONObject? = null
-    ) {
+    ): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val actionId = UUID.randomUUID().toString()
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         val timestamp = sdf.format(Date())
@@ -39,32 +48,28 @@ object ActionsRepository {
             metadata = metadata?.toString()
         )
 
-        scope.launch {
-            // Save to local cache first
+        // 1. Sync to Supabase first
+        val payload = JSONObject().apply {
+            put("action_id", actionId)
+            put("entity_type", entityType)
+            put("entity_id", entityId)
+            put("action", action)
+            put("action_timestamp", timestamp)
+            put("metadata", metadata ?: JSONObject())
+        }
+
+        val success = JarvisInsightsClient.insertRow("user_actions", payload.toString())
+        if (success) {
+            Log.d(TAG, "User action synced to Supabase")
+            // 2. Save to local Room cache on success
             try {
                 JarvisDatabase.getDatabase(context).userActionDao().insert(actionEntity)
             } catch (e: Exception) {
                 Log.e(TAG, "Error inserting local user action", e)
             }
-
-            // Sync to Supabase
-            val payload = JSONObject().apply {
-                put("action_id", actionId)
-                put("entity_type", entityType)
-                put("entity_id", entityId)
-                put("action", action)
-                put("action_timestamp", timestamp)
-                put("metadata", metadata ?: JSONObject())
-            }
-
-            val success = JarvisInsightsClient.insertRow("user_actions", payload.toString())
-            if (success) {
-                try {
-                    JarvisDatabase.getDatabase(context).userActionDao().deleteById(actionId)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error deleting local user action after sync", e)
-                }
-            }
+        } else {
+            Log.e(TAG, "Failed to sync user action to Supabase. Room cache not modified.")
         }
+        success
     }
 }

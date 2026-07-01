@@ -11,6 +11,10 @@ import com.pradeep.jarviscollector.model.FyiEventEntity
 import com.pradeep.jarviscollector.model.UserPreferenceEntity
 import com.pradeep.jarviscollector.model.UserActionEntity
 import com.pradeep.jarviscollector.model.DailyBriefEntity
+import com.pradeep.jarviscollector.model.FactInsightEntity
+import com.pradeep.jarviscollector.model.NotificationEntity
+import com.pradeep.jarviscollector.model.FinancialInsightEntity
+import com.pradeep.jarviscollector.model.SyncDiagnosticsEntity
 
 @Database(
     entities = [
@@ -20,9 +24,13 @@ import com.pradeep.jarviscollector.model.DailyBriefEntity
         FyiEventEntity::class,
         UserPreferenceEntity::class,
         UserActionEntity::class,
-        DailyBriefEntity::class
+        DailyBriefEntity::class,
+        FactInsightEntity::class,
+        NotificationEntity::class,
+        FinancialInsightEntity::class,
+        SyncDiagnosticsEntity::class
     ],
-    version = 3,
+    version = 6,
     exportSchema = false
 )
 abstract class JarvisDatabase : RoomDatabase() {
@@ -34,6 +42,10 @@ abstract class JarvisDatabase : RoomDatabase() {
     abstract fun userPreferenceDao(): UserPreferenceDao
     abstract fun userActionDao(): UserActionDao
     abstract fun dailyBriefDao(): DailyBriefDao
+    abstract fun factInsightDao(): FactInsightDao
+    abstract fun notificationDao(): NotificationDao
+    abstract fun financialInsightDao(): FinancialInsightDao
+    abstract fun syncDiagnosticsDao(): SyncDiagnosticsDao
 
     companion object {
         private var INSTANCE: JarvisDatabase? = null

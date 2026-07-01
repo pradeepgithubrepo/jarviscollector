@@ -10,17 +10,44 @@ import com.pradeep.jarviscollector.model.FinancialEventEntity
 import com.pradeep.jarviscollector.model.FyiEventEntity
 import com.pradeep.jarviscollector.model.TodoEntity
 import com.pradeep.jarviscollector.model.MobileSignal
+import com.pradeep.jarviscollector.model.FactInsightEntity
+import com.pradeep.jarviscollector.model.NotificationEntity
+import com.pradeep.jarviscollector.model.FinancialInsightEntity
+import com.pradeep.jarviscollector.model.UserPreferenceEntity
+import com.pradeep.jarviscollector.model.UserActionEntity
 import com.pradeep.jarviscollector.ui.*
+import com.pradeep.jarviscollector.ui.facts.FactsScreen
+import com.pradeep.jarviscollector.ui.notification.NotificationCenterScreen
+import com.pradeep.jarviscollector.ui.actioncenter.ActionCenterScreen
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.Text
 
 @Composable
 fun JarvisNavHost(
     navController: NavHostController,
     ownerName: String,
     todos: List<TodoEntity>,
+    snapshotInsights: List<FinancialInsightEntity>,
+    actionRequiredInsights: List<FinancialInsightEntity>,
+    subscriptionInsights: List<FinancialInsightEntity>,
+    upcomingBillInsights: List<FinancialInsightEntity>,
+    unusualActivityInsights: List<FinancialInsightEntity>,
     financialEvents: List<FinancialEventEntity>,
     fyiEvents: List<FyiEventEntity>,
     latestBrief: DailyBriefEntity?,
     roomSignals: List<MobileSignal>,
+    facts: List<FactInsightEntity>,
+    notifications: List<NotificationEntity>,
+    preferences: List<UserPreferenceEntity>,
+    userActions: List<UserActionEntity>,
     exportPath: String,
     isSyncing: Boolean,
     syncResultMessage: String?,
@@ -33,6 +60,17 @@ fun JarvisNavHost(
     onOwnerNameChange: (String) -> Unit,
     onLoadInsights: () -> Unit,
     onCompleteTodo: (String) -> Unit,
+    onToggleFactRead: (String, Boolean) -> Unit,
+    onMarkFyiRead: (String, Boolean) -> Unit,
+    onDismissFyi: (String) -> Unit,
+    onMarkNotificationRead: (String, Boolean) -> Unit,
+    onArchiveNotification: (String) -> Unit,
+    onTogglePreference: (String, Boolean) -> Unit,
+    onConfirmTransaction: (String) -> Unit,
+    onCorrectTransaction: (String, String, Double) -> Unit,
+    onConfirmInsight: (String) -> Unit,
+    onDismissInsight: (String) -> Unit,
+    onCorrectInsight: (String, String, Double) -> Unit,
     onSnoozeTodo: (String) -> Unit,
     onDeleteTodo: (String) -> Unit,
     onLoadRoom: () -> Unit,
@@ -44,6 +82,7 @@ fun JarvisNavHost(
     onDismissBackfillResult: () -> Unit,
     onRunBackfillAgain: () -> Unit,
     onStartBackfill: () -> Unit,
+    onNavigateToSignalExplorer: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val familyEvents = fyiEvents.filter { it.category?.lowercase() == "family" }
@@ -60,33 +99,127 @@ fun JarvisNavHost(
         composable(Screen.Home.route) {
             HomeScreen(
                 ownerName = ownerName,
-                pendingTodoCount = todos.count { it.status == "OPEN" || it.status == "SNOOZED" },
-                unpaidBillCount = financialEvents.count { it.status?.lowercase() == "upcoming" || it.category?.lowercase() == "bill" },
-                newFyiCount = fyiEvents.size,
-                familyCount = familyEvents.size,
-                schoolCount = schoolEvents.size,
-                travelCount = travelEvents.size,
-                healthCount = healthEvents.size,
-                shoppingCount = shoppingEvents.size,
-                briefDate = latestBrief?.generatedAt,
-                onNavigateToTodos = { navController.navigate(Screen.Tasks.route) },
-                onNavigateToFinancial = { navController.navigate(Screen.Finance.route) },
-                onNavigateToFyi = { navController.navigate(Screen.Fyi.route) },
-                onNavigateToDailyBrief = { navController.navigate(Screen.Brief.route) },
-                onNavigateToFamily = { navController.navigate(Screen.FyiCategory.createRoute("family")) },
-                onNavigateToSchool = { navController.navigate(Screen.FyiCategory.createRoute("school")) },
-                onNavigateToTravel = { navController.navigate(Screen.FyiCategory.createRoute("travel")) },
-                onNavigateToHealth = { navController.navigate(Screen.FyiCategory.createRoute("health")) },
-                onNavigateToShopping = { navController.navigate(Screen.FyiCategory.createRoute("shopping")) },
-                onNavigateToCollectorSettings = { navController.navigate(Screen.Profile.route) },
+                todos = todos,
+                financialEvents = financialEvents,
+                fyiEvents = fyiEvents,
+                latestBrief = latestBrief,
+                recentFacts = facts.filter { it.read_flag != true },
+                notifications = notifications,
+                recentActions = userActions,
+                financialInsights = snapshotInsights + actionRequiredInsights + subscriptionInsights + upcomingBillInsights + unusualActivityInsights,
+                onNavigateToTodos = {
+                    try {
+                        navController.navigate(Screen.Tasks.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: tasks", e)
+                    }
+                },
+                onNavigateToFinancial = {
+                    try {
+                        navController.navigate(Screen.Finance.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: finance", e)
+                    }
+                },
+                onNavigateToFyi = {
+                    try {
+                        navController.navigate(Screen.Fyi.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: fyi", e)
+                    }
+                },
+                onNavigateToDailyBrief = {
+                    try {
+                        navController.navigate(Screen.Brief.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: brief", e)
+                    }
+                },
+                onNavigateToFamily = {
+                    try {
+                        navController.navigate(Screen.FyiCategory.createRoute("family"))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: family", e)
+                    }
+                },
+                onNavigateToSchool = {
+                    try {
+                        navController.navigate(Screen.FyiCategory.createRoute("school"))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: school", e)
+                    }
+                },
+                onNavigateToTravel = {
+                    try {
+                        navController.navigate(Screen.FyiCategory.createRoute("travel"))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: travel", e)
+                    }
+                },
+                onNavigateToHealth = {
+                    try {
+                        navController.navigate(Screen.FyiCategory.createRoute("health"))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: health", e)
+                    }
+                },
+                onNavigateToShopping = {
+                    try {
+                        navController.navigate(Screen.FyiCategory.createRoute("shopping"))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: shopping", e)
+                    }
+                },
+                onNavigateToCollectorSettings = {
+                    try {
+                        navController.navigate(Screen.Profile.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: profile", e)
+                    }
+                },
+                onNavigateToFacts = {
+                    try {
+                        navController.navigate(Screen.Facts.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: facts", e)
+                    }
+                },
+                onNavigateToNotificationCenter = {
+                    try {
+                        navController.navigate(Screen.NotificationCenter.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: notification_center", e)
+                    }
+                },
+                onNavigateToActionCenter = {
+                    try {
+                        navController.navigate(Screen.ActionCenter.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: action_center", e)
+                    }
+                },
                 onOwnerNameChange = onOwnerNameChange,
-                onLoadInsights = onLoadInsights
+                onLoadInsights = onLoadInsights,
+                onCompleteTodo = onCompleteTodo,
+                onNavigateToTaskDetail = { id ->
+                    try {
+                        navController.navigate(Screen.TaskDetail.createRoute(id))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: task_detail", e)
+                    }
+                },
+                onNavigateToFactDetail = { id ->
+                    try {
+                        navController.navigate(Screen.FactDetail.createRoute(id))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: fact_detail", e)
+                    }
+                }
             )
         }
 
         composable(Screen.Brief.route) {
             DailyBriefScreen(
-                brief = latestBrief,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -97,6 +230,7 @@ fun JarvisNavHost(
                 onComplete = onCompleteTodo,
                 onSnooze = onSnoozeTodo,
                 onDelete = onDeleteTodo,
+                onNavigateToSignalExplorer = onNavigateToSignalExplorer,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -104,6 +238,8 @@ fun JarvisNavHost(
         composable(Screen.Fyi.route) {
             FyiScreen(
                 events = fyiEvents,
+                onMarkRead = onMarkFyiRead,
+                onDismiss = onDismissFyi,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -112,6 +248,8 @@ fun JarvisNavHost(
             NotificationScreen(
                 notifications = com.pradeep.jarviscollector.repository.NotificationRepository.notifications,
                 roomSignals = roomSignals,
+                preferences = preferences,
+                onTogglePreference = onTogglePreference,
                 onLoadRoom = onLoadRoom,
                 onExportJson = onExportJson,
                 onSyncNow = onSyncNow,
@@ -131,20 +269,71 @@ fun JarvisNavHost(
                 backfillCompleted = backfillCompleted,
                 onDismissBackfillResult = onDismissBackfillResult,
                 onRunAgain = onRunBackfillAgain,
-                onStartBackfill = onStartBackfill
+                onStartBackfill = onStartBackfill,
+                onNavigateToDebugPipeline = { navController.navigate(Screen.DebugPipeline.route) }
             )
         }
 
         composable(Screen.Finance.route) {
             FinancialScreen(
-                events = financialEvents,
-                onBack = { navController.popBackStack() }
+                snapshotInsights = snapshotInsights,
+                actionRequired = actionRequiredInsights,
+                subscriptions = subscriptionInsights,
+                upcomingBills = upcomingBillInsights,
+                unusualActivity = unusualActivityInsights,
+                onConfirmInsight = onConfirmInsight,
+                onDismissInsight = onDismissInsight,
+                onCorrectInsight = onCorrectInsight,
+                onNavigateToSignalExplorer = onNavigateToSignalExplorer,
+                onBack = { navController.popBackStack() },
+                onNavigateToTransactionDetail = { id ->
+                    try {
+                        navController.navigate(Screen.TransactionDetail.createRoute(id))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: transaction_detail", e)
+                    }
+                }
             )
         }
 
         composable(Screen.Facts.route) {
-            // Facts Screen placeholder for Phase 1
-            androidx.compose.material3.Text("Facts Screen - Coming in Phase 3")
+            FactsScreen(
+                facts = facts,
+                onToggleRead = onToggleFactRead,
+                onNavigateToSignalExplorer = onNavigateToSignalExplorer,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.NotificationCenter.route) {
+            NotificationCenterScreen(
+                notifications = notifications,
+                onMarkRead = onMarkNotificationRead,
+                onArchive = onArchiveNotification,
+                onNavigateToRoute = { route ->
+                    val screenRoute = when (route.lowercase()) {
+                        "facts" -> Screen.Facts.route
+                        "tasks" -> Screen.Tasks.route
+                        "brief" -> Screen.Brief.route
+                        "fyi" -> Screen.Fyi.route
+                        "finance" -> Screen.Finance.route
+                        "profile" -> Screen.Profile.route
+                        else -> null
+                    }
+                    if (screenRoute != null) {
+                        navController.navigate(screenRoute)
+                    }
+                },
+                onNavigateToSignalExplorer = onNavigateToSignalExplorer,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.ActionCenter.route) {
+            ActionCenterScreen(
+                actions = userActions,
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(Screen.FyiCategory.route) { backStackEntry ->
@@ -152,6 +341,9 @@ fun JarvisNavHost(
             FyiCategoryScreen(
                 category = category,
                 events = fyiEvents,
+                onMarkRead = onMarkFyiRead,
+                onDismiss = onDismissFyi,
+                onNavigateToSignalExplorer = onNavigateToSignalExplorer,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -160,6 +352,82 @@ fun JarvisNavHost(
             val id = backStackEntry.arguments?.getString("id") ?: ""
             // Notification Detail Screen placeholder for Phase 1
             androidx.compose.material3.Text("Notification Detail Screen for ID: $id")
+        }
+
+        composable(Screen.SignalExplorer.route) { backStackEntry ->
+            val entityType = backStackEntry.arguments?.getString("entityType") ?: ""
+            val entityId = backStackEntry.arguments?.getString("entityId") ?: ""
+            val context = androidx.compose.ui.platform.LocalContext.current
+            
+            val traceState = remember(entityType, entityId) {
+                mutableStateOf<com.pradeep.jarviscollector.repository.SignalTrace?>(null)
+            }
+            
+            LaunchedEffect(entityType, entityId) {
+                traceState.value = com.pradeep.jarviscollector.repository.SignalExplorerRepository.getTraceForEntity(
+                    context, entityType, entityId
+                )
+            }
+            
+            traceState.value?.let { trace ->
+                com.pradeep.jarviscollector.ui.signalexplorer.SignalExplorerScreen(
+                    trace = trace,
+                    onBack = { navController.popBackStack() }
+                )
+            } ?: Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
+        composable(Screen.DebugPipeline.route) {
+            com.pradeep.jarviscollector.ui.debug.DebugDataPipelineScreen(
+                todos = todos,
+                facts = facts,
+                notifications = notifications,
+                financialInsights = snapshotInsights + actionRequiredInsights + subscriptionInsights + upcomingBillInsights + unusualActivityInsights,
+                fyiEvents = fyiEvents,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.TaskDetail.route,
+            arguments = listOf(androidx.navigation.navArgument("id") { type = androidx.navigation.NavType.StringType })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id") ?: ""
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Task Detail Screen for ID: $id", color = Color.White)
+            }
+        }
+
+        composable(
+            route = Screen.FactDetail.route,
+            arguments = listOf(androidx.navigation.navArgument("id") { type = androidx.navigation.NavType.StringType })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id") ?: ""
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Fact Detail Screen for ID: $id", color = Color.White)
+            }
+        }
+
+        composable(
+            route = Screen.TransactionDetail.route,
+            arguments = listOf(androidx.navigation.navArgument("id") { type = androidx.navigation.NavType.StringType })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("id") ?: ""
+            com.pradeep.jarviscollector.ui.financial.TransactionDetailScreen(
+                transactionId = id,
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

@@ -10,6 +10,12 @@ import com.pradeep.jarviscollector.model.TodoEntity
 import com.pradeep.jarviscollector.model.FinancialEventEntity
 import com.pradeep.jarviscollector.model.FyiEventEntity
 import com.pradeep.jarviscollector.model.DailyBriefEntity
+import com.pradeep.jarviscollector.model.FactInsightEntity
+import com.pradeep.jarviscollector.model.NotificationEntity
+import com.pradeep.jarviscollector.model.UserPreferenceEntity
+import com.pradeep.jarviscollector.model.UserActionEntity
+import com.pradeep.jarviscollector.model.FinancialInsightEntity
+import com.pradeep.jarviscollector.repository.FinancialInsightRepository
 import com.pradeep.jarviscollector.database.JarvisDatabase
 import com.pradeep.jarviscollector.repository.MobileSignalRepository
 import com.pradeep.jarviscollector.repository.NotificationRepository
@@ -18,6 +24,8 @@ import com.pradeep.jarviscollector.repository.FinancialRepository
 import com.pradeep.jarviscollector.repository.FYIRepository
 import com.pradeep.jarviscollector.repository.PreferenceRepository
 import com.pradeep.jarviscollector.repository.ActionsRepository
+import com.pradeep.jarviscollector.repository.FactRepository
+import com.pradeep.jarviscollector.repository.NotificationCenterRepository
 import com.pradeep.jarviscollector.ui.NotificationScreen
 import com.pradeep.jarviscollector.ui.HomeScreen
 import com.pradeep.jarviscollector.ui.TodoScreen
@@ -69,8 +77,25 @@ class MainActivity : ComponentActivity() {
         setContent {
             var todos by remember { mutableStateOf(emptyList<TodoEntity>()) }
             var financialEvents by remember { mutableStateOf(emptyList<FinancialEventEntity>()) }
+
+            val allInsightsFlow = remember { FinancialInsightRepository.observeInsights(applicationContext) }
+            val allInsights by allInsightsFlow.collectAsState(initial = emptyList())
+            
+            val snapshotInsights = remember(allInsights) { allInsights.filter { it.type?.lowercase() == "snapshot" } }
+            val actionRequiredInsights = remember(allInsights) { allInsights.filter {
+                val t = it.type?.lowercase() ?: ""
+                val isAction = t == "action_required" || t == "upcoming_bill" || t == "emi"
+                isAction && (it.status?.uppercase() == "PENDING")
+            } }
+            val subscriptionInsights = remember(allInsights) { allInsights.filter { it.type?.lowercase() == "subscription" } }
+            val upcomingBillInsights = remember(allInsights) { allInsights.filter { it.type?.lowercase() == "bill" } }
+            val unusualActivityInsights = remember(allInsights) { allInsights.filter { it.type?.lowercase() == "unusual" } }
             var fyiEvents by remember { mutableStateOf(emptyList<FyiEventEntity>()) }
             var latestBrief by remember { mutableStateOf<DailyBriefEntity?>(null) }
+            var facts by remember { mutableStateOf(emptyList<FactInsightEntity>()) }
+            var notifications by remember { mutableStateOf(emptyList<NotificationEntity>()) }
+            var preferences by remember { mutableStateOf(emptyList<UserPreferenceEntity>()) }
+            var userActions by remember { mutableStateOf(emptyList<UserActionEntity>()) }
             var roomSignals by remember { mutableStateOf(emptyList<MobileSignal>()) }
             var exportPath by remember { mutableStateOf("") }
             var isSyncing by remember { mutableStateOf(false) }
@@ -91,11 +116,23 @@ class MainActivity : ComponentActivity() {
                     financialEvents = FinancialRepository.getFinancialEvents(applicationContext)
                     fyiEvents = FYIRepository.getFyiEvents(applicationContext)
                     latestBrief = JarvisDatabase.getDatabase(applicationContext).dailyBriefDao().getLatest()
+                    facts = FactRepository.getFacts(applicationContext)
+                    notifications = NotificationCenterRepository.getNotifications(applicationContext)
+                    preferences = PreferenceRepository.getPreferences(applicationContext)
+                    userActions = ActionsRepository.getActions(applicationContext)
                 }
             }
 
             LaunchedEffect(ownerName) {
                 refreshInsights()
+                lifecycleScope.launch {
+                    try {
+                        com.pradeep.jarviscollector.service.InsightSyncService.syncInsights(applicationContext)
+                        refreshInsights()
+                    } catch (e: Exception) {
+                        android.util.Log.e("MainActivity", "Auto-sync failed on launch", e)
+                    }
+                }
             }
 
             JarvisTheme {
@@ -107,9 +144,84 @@ class MainActivity : ComponentActivity() {
                         navController = navController,
                         ownerName = ownerName,
                         todos = todos,
+                        snapshotInsights = snapshotInsights,
+                        actionRequiredInsights = actionRequiredInsights,
+                        subscriptionInsights = subscriptionInsights,
+                        upcomingBillInsights = upcomingBillInsights,
+                        unusualActivityInsights = unusualActivityInsights,
                         financialEvents = financialEvents,
                         fyiEvents = fyiEvents,
                         latestBrief = latestBrief,
+                        facts = facts,
+                        onToggleFactRead = { id, readFlag ->
+                            lifecycleScope.launch {
+                                FactRepository.markFactRead(applicationContext, id, readFlag)
+                                refreshInsights()
+                            }
+                        },
+                        onMarkFyiRead = { id, readFlag ->
+                            lifecycleScope.launch {
+                                FYIRepository.markFyiRead(applicationContext, id, readFlag)
+                                refreshInsights()
+                            }
+                        },
+                        onDismissFyi = { id ->
+                            lifecycleScope.launch {
+                                FYIRepository.dismissFyi(applicationContext, id)
+                                refreshInsights()
+                            }
+                        },
+                        notifications = notifications,
+                        onMarkNotificationRead = { id, readFlag ->
+                            lifecycleScope.launch {
+                                NotificationCenterRepository.markNotificationRead(applicationContext, id, readFlag)
+                                refreshInsights()
+                            }
+                        },
+                        onArchiveNotification = { id ->
+                            lifecycleScope.launch {
+                                NotificationCenterRepository.archiveNotification(applicationContext, id)
+                                refreshInsights()
+                            }
+                        },
+                        preferences = preferences,
+                        userActions = userActions,
+                        onTogglePreference = { key, enabled ->
+                            lifecycleScope.launch {
+                                PreferenceRepository.savePreference(applicationContext, key, enabled.toString())
+                                refreshInsights()
+                            }
+                        },
+                        onConfirmTransaction = { id ->
+                            lifecycleScope.launch {
+                                FinancialRepository.confirmTransaction(applicationContext, id)
+                                refreshInsights()
+                            }
+                        },
+                        onCorrectTransaction = { id, category, amount ->
+                            lifecycleScope.launch {
+                                FinancialRepository.correctTransaction(applicationContext, id, category, amount)
+                                refreshInsights()
+                            }
+                        },
+                        onConfirmInsight = { id ->
+                            lifecycleScope.launch {
+                                FinancialInsightRepository.confirmInsight(applicationContext, id)
+                                refreshInsights()
+                            }
+                        },
+                        onDismissInsight = { id ->
+                            lifecycleScope.launch {
+                                FinancialInsightRepository.dismissInsight(applicationContext, id)
+                                refreshInsights()
+                            }
+                        },
+                        onCorrectInsight = { id, category, amount ->
+                            lifecycleScope.launch {
+                                FinancialInsightRepository.correctInsight(applicationContext, id, category, amount)
+                                refreshInsights()
+                            }
+                        },
                         roomSignals = roomSignals,
                         exportPath = exportPath,
                         isSyncing = isSyncing,
@@ -287,6 +399,9 @@ class MainActivity : ComponentActivity() {
                                      backfillStep = null
                                  }
                              }
+                        },
+                        onNavigateToSignalExplorer = { type, id ->
+                            navController.navigate(Screen.SignalExplorer.createRoute(type, id))
                         },
                         modifier = Modifier.padding(innerPadding)
                     )

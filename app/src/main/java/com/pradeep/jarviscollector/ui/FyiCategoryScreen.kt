@@ -23,6 +23,9 @@ import com.pradeep.jarviscollector.model.FyiEventEntity
 fun FyiCategoryScreen(
     category: String,
     events: List<FyiEventEntity>,
+    onMarkRead: (String, Boolean) -> Unit,
+    onDismiss: (String) -> Unit,
+    onNavigateToSignalExplorer: (String, String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -37,7 +40,8 @@ fun FyiCategoryScreen(
 
     val filteredEvents = events.filter {
         val eventCat = it.category?.trim()?.lowercase() ?: ""
-        if (cleanCategory == "shopping") {
+        val active = it.status != "DISMISSED" && it.status != "ARCHIVED"
+        active && if (cleanCategory == "shopping") {
             eventCat == "shopping" || eventCat == "deliveries"
         } else {
             eventCat == cleanCategory
@@ -96,7 +100,14 @@ fun FyiCategoryScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(filteredEvents, key = { it.fyi_event_id }) { event ->
-                    FyiCategoryCard(event = event, tagText = tagText, accentColor = accentColor)
+                    FyiCategoryCard(
+                        event = event,
+                        tagText = tagText,
+                        accentColor = accentColor,
+                        onMarkRead = onMarkRead,
+                        onDismiss = onDismiss,
+                        onViewEvidence = { onNavigateToSignalExplorer("fyi", event.fyi_event_id) }
+                    )
                 }
             }
         }
@@ -108,16 +119,21 @@ fun FyiCategoryCard(
     event: FyiEventEntity,
     tagText: String,
     accentColor: Color,
+    onMarkRead: (String, Boolean) -> Unit,
+    onDismiss: (String) -> Unit,
+    onViewEvidence: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val isRead = event.read_flag == true
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isRead) MaterialTheme.colorScheme.surface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surface
         ),
         border = BorderStroke(
             1.dp,
-            Color.White.copy(alpha = 0.05f)
+            if (isRead) Color.White.copy(alpha = 0.02f) else Color.White.copy(alpha = 0.05f)
         ),
         modifier = modifier.fillMaxWidth()
     ) {
@@ -129,27 +145,35 @@ fun FyiCategoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = accentColor.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = tagText,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = accentColor,
-                        modifier = Modifier.padding(
-                            horizontal = 6.dp,
-                            vertical = 2.dp
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = accentColor.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = tagText,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accentColor,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
-                    )
+                    }
+                    if (isRead) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "READ",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
                 }
                 
                 if (!event.created_at.isNullOrBlank()) {
                     Text(
                         text = event.created_at,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -160,7 +184,7 @@ fun FyiCategoryCard(
                 text = event.title ?: "Update",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = if (isRead) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
             )
             
             if (!event.summary.isNullOrBlank()) {
@@ -171,6 +195,38 @@ fun FyiCategoryCard(
                     lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onViewEvidence != null) {
+                    TextButton(
+                        onClick = onViewEvidence,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("View Evidence", fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+                if (!isRead) {
+                    TextButton(
+                        onClick = { onMarkRead(event.fyi_event_id, true) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Mark Read", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                TextButton(
+                    onClick = { onDismiss(event.fyi_event_id) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("Dismiss", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }

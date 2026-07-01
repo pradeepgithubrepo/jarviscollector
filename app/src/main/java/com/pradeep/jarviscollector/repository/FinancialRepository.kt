@@ -24,16 +24,24 @@ object FinancialRepository {
         return getDao(context).getAll()
     }
 
-    fun overrideCategory(context: Context, id: String, category: String) {
+    suspend fun overrideCategory(context: Context, id: String, category: String): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         val timestamp = sdf.format(Date())
 
-        scope.launch {
-            // Update Room locally (needs a quick direct query update or fetch/modify/insert)
-            val db = JarvisDatabase.getDatabase(context)
+        val payload = JSONObject().apply {
+            put("category", category)
+            put("updated_at", timestamp)
+        }
+
+        val success = JarvisInsightsClient.updateRow(
+            "financial_events",
+            "financial_event_id=eq.$id",
+            payload.toString()
+        )
+
+        if (success) {
+            Log.d(TAG, "Financial event category override synced to Supabase")
             try {
-                // Since Room doesn't have a direct @Query update category in our DAO yet, let's fetch all and filter/update, or we can just let it sync on pull, but let's do it cleanly by upserting the updated entity if we can.
-                // Alternatively, we can let Room get updated when we sync. But to avoid local category delay, let's fetch the existing entity, modify it, and write it back.
                 val events = getDao(context).getAll()
                 val target = events.find { it.financial_event_id == id }
                 if (target != null) {
@@ -44,22 +52,6 @@ object FinancialRepository {
                 Log.e(TAG, "Error updating category locally", e)
             }
 
-            // Sync category override to Supabase
-            val payload = JSONObject().apply {
-                put("category", category)
-                put("updated_at", timestamp)
-            }
-
-            val success = JarvisInsightsClient.updateRow(
-                "financial_events",
-                "financial_event_id=eq.$id",
-                payload.toString()
-            )
-            if (success) {
-                Log.d(TAG, "Financial event category override synced to Supabase")
-            }
-
-            // Log action
             ActionsRepository.logAction(
                 context = context,
                 entityType = "financial_events",
@@ -67,6 +59,93 @@ object FinancialRepository {
                 action = "financial_category_override",
                 metadata = JSONObject().apply { put("category", category) }
             )
+        } else {
+            Log.e(TAG, "Failed to sync category override to Supabase. Room cache not modified.")
         }
+        success
+    }
+
+    suspend fun confirmTransaction(context: Context, id: String): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        val timestamp = sdf.format(Date())
+
+        val payload = JSONObject().apply {
+            put("status", "CONFIRMED")
+            put("updated_at", timestamp)
+        }
+
+        val success = JarvisInsightsClient.updateRow(
+            "financial_events",
+            "financial_event_id=eq.$id",
+            payload.toString()
+        )
+
+        if (success) {
+            Log.d(TAG, "Financial transaction confirmation synced to Supabase")
+            try {
+                val events = getDao(context).getAll()
+                val target = events.find { it.financial_event_id == id }
+                if (target != null) {
+                    val updated = target.copy(status = "CONFIRMED", updated_at = timestamp)
+                    getDao(context).insertAll(listOf(updated))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error confirming transaction locally", e)
+            }
+
+            ActionsRepository.logAction(
+                context = context,
+                entityType = "financial_events",
+                entityId = id,
+                action = "financial_confirm",
+                metadata = payload
+            )
+        } else {
+            Log.e(TAG, "Failed to confirm transaction on Supabase. Room cache not modified.")
+        }
+        success
+    }
+
+    suspend fun correctTransaction(context: Context, id: String, category: String, amount: Double): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        val timestamp = sdf.format(Date())
+
+        val payload = JSONObject().apply {
+            put("status", "CORRECTED")
+            put("category", category)
+            put("amount", amount)
+            put("updated_at", timestamp)
+        }
+
+        val success = JarvisInsightsClient.updateRow(
+            "financial_events",
+            "financial_event_id=eq.$id",
+            payload.toString()
+        )
+
+        if (success) {
+            Log.d(TAG, "Financial transaction correction synced to Supabase")
+            try {
+                val events = getDao(context).getAll()
+                val target = events.find { it.financial_event_id == id }
+                if (target != null) {
+                    val updated = target.copy(status = "CORRECTED", category = category, amount = amount, updated_at = timestamp)
+                    getDao(context).insertAll(listOf(updated))
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error correcting transaction locally", e)
+            }
+
+            ActionsRepository.logAction(
+                context = context,
+                entityType = "financial_events",
+                entityId = id,
+                action = "financial_correct",
+                metadata = payload
+            )
+        } else {
+            Log.e(TAG, "Failed to correct transaction on Supabase. Room cache not modified.")
+        }
+        success
     }
 }

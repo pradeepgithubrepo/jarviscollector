@@ -22,9 +22,14 @@ import com.pradeep.jarviscollector.model.FyiEventEntity
 @Composable
 fun FyiScreen(
     events: List<FyiEventEntity>,
+    onMarkRead: (String, Boolean) -> Unit,
+    onDismiss: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Filter out dismissed items
+    val activeEvents = events.filter { it.status != "DISMISSED" && it.status != "ARCHIVED" }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -52,7 +57,7 @@ fun FyiScreen(
             )
         )
 
-        if (events.isEmpty()) {
+        if (activeEvents.isEmpty()) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -76,8 +81,12 @@ fun FyiScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(events, key = { it.fyi_event_id }) { event ->
-                    FyiCard(event = event)
+                items(activeEvents, key = { it.fyi_event_id }) { event ->
+                    FyiCard(
+                        event = event,
+                        onMarkRead = onMarkRead,
+                        onDismiss = onDismiss
+                    )
                 }
             }
         }
@@ -87,6 +96,8 @@ fun FyiScreen(
 @Composable
 fun FyiCard(
     event: FyiEventEntity,
+    onMarkRead: (String, Boolean) -> Unit,
+    onDismiss: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val categoryName = event.category ?: "OTHER"
@@ -98,14 +109,16 @@ fun FyiCard(
         else -> Color(0xFF6B7280)           // Gray
     }
     
+    val isRead = event.read_flag == true
+
     Card(
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = if (isRead) MaterialTheme.colorScheme.surface.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surface
         ),
         border = BorderStroke(
             1.dp,
-            Color.White.copy(alpha = 0.05f)
+            if (isRead) Color.White.copy(alpha = 0.02f) else Color.White.copy(alpha = 0.05f)
         ),
         modifier = modifier.fillMaxWidth()
     ) {
@@ -117,27 +130,35 @@ fun FyiCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = badgeColor.copy(alpha = 0.15f)
-                ) {
-                    Text(
-                        text = categoryName.uppercase(),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = badgeColor,
-                        modifier = Modifier.padding(
-                            horizontal = 6.dp,
-                            vertical = 2.dp
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = badgeColor.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = categoryName.uppercase(),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = badgeColor,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
-                    )
+                    }
+                    if (isRead) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "READ",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
                 }
                 
                 if (!event.created_at.isNullOrBlank()) {
                     Text(
                         text = event.created_at,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
             }
@@ -148,7 +169,7 @@ fun FyiCard(
                 text = event.title ?: "Notification Update",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = if (isRead) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface
             )
             
             if (!event.summary.isNullOrBlank()) {
@@ -159,6 +180,29 @@ fun FyiCard(
                     lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!isRead) {
+                    TextButton(
+                        onClick = { onMarkRead(event.fyi_event_id, true) },
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Text("Mark Read", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                TextButton(
+                    onClick = { onDismiss(event.fyi_event_id) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text("Dismiss", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }

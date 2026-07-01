@@ -30,6 +30,7 @@ fun TodoScreen(
     onComplete: (String) -> Unit,
     onSnooze: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onNavigateToSignalExplorer: (String, String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -126,7 +127,8 @@ fun TodoScreen(
                         todo = todo,
                         onComplete = { onComplete(todo.todo_id) },
                         onSnooze = { onSnooze(todo.todo_id) },
-                        onDelete = { onDelete(todo.todo_id) }
+                        onDelete = { onDelete(todo.todo_id) },
+                        onViewEvidence = { onNavigateToSignalExplorer("todo", todo.todo_id) }
                     )
                 }
             }
@@ -140,6 +142,7 @@ fun TodoCard(
     onComplete: () -> Unit,
     onSnooze: () -> Unit,
     onDelete: () -> Unit,
+    onViewEvidence: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isCompleted = todo.status == "COMPLETED"
@@ -214,7 +217,7 @@ fun TodoCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!todo.due_date.isNullOrBlank()) {
                         Text(
                             text = "Due: ${todo.due_date}",
@@ -222,6 +225,15 @@ fun TodoCard(
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.primary
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    if (onViewEvidence != null) {
+                        TextButton(
+                            onClick = onViewEvidence,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Evidence", fontSize = 11.sp)
+                        }
                     }
                 }
 

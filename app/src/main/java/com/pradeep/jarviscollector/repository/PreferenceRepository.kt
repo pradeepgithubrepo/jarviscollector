@@ -28,7 +28,7 @@ object PreferenceRepository {
         return getDao(context).getByKey(key)
     }
 
-    fun savePreference(context: Context, key: String, value: String) {
+    suspend fun savePreference(context: Context, key: String, value: String): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         val timestamp = sdf.format(Date())
 
@@ -38,27 +38,21 @@ object PreferenceRepository {
             updated_at = timestamp
         )
 
-        scope.launch {
-            // Save to Room cache
+        val payload = JSONObject().apply {
+            put("preference_key", key)
+            put("preference_value", value)
+            put("updated_at", timestamp)
+        }
+
+        val success = JarvisInsightsClient.insertRow("user_preferences", payload.toString())
+        if (success) {
+            Log.d(TAG, "Preference synced successfully to Supabase")
             try {
                 getDao(context).insert(preference)
             } catch (e: Exception) {
                 Log.e(TAG, "Error inserting preference locally", e)
             }
 
-            // Sync to Supabase
-            val payload = JSONObject().apply {
-                put("preference_key", key)
-                put("preference_value", value)
-                put("updated_at", timestamp)
-            }
-
-            val success = JarvisInsightsClient.insertRow("user_preferences", payload.toString())
-            if (success) {
-                Log.d(TAG, "Preference synced successfully to Supabase")
-            }
-
-            // Also log user action
             ActionsRepository.logAction(
                 context = context,
                 entityType = "user_preferences",
@@ -66,6 +60,9 @@ object PreferenceRepository {
                 action = "preference_change",
                 metadata = JSONObject().apply { put("preference_value", value) }
             )
+        } else {
+            Log.e(TAG, "Failed to sync preference to Supabase. Room cache not modified.")
         }
+        success
     }
 }

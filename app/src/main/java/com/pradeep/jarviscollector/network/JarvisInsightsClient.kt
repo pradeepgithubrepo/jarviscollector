@@ -18,7 +18,6 @@ object JarvisInsightsClient {
     private val client = OkHttpClient()
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
-
     /**
      * Fetch all records from a Supabase table.
      */
@@ -38,12 +37,20 @@ object JarvisInsightsClient {
             val response = client.newCall(request).execute()
             val body = response.body?.string()
             if (response.isSuccessful) {
+                val rowCount = try {
+                    org.json.JSONArray(body).length()
+                } catch (e: Exception) {
+                    1
+                }
+                QueryInstrumentation.log("GET", url, rowCount, true)
                 body
             } else {
+                QueryInstrumentation.log("GET", url, 0, false, "Code ${response.code}: $body")
                 Log.e(TAG, "Failed to GET $tableName: Code ${response.code}, Body: $body")
                 null
             }
         } catch (ex: Exception) {
+            QueryInstrumentation.log("GET", url, 0, false, ex.message ?: ex.toString())
             Log.e(TAG, "Exception during GET $tableName", ex)
             null
         }
@@ -69,14 +76,17 @@ object JarvisInsightsClient {
         return try {
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
+                QueryInstrumentation.log("POST", url, 1, true)
                 Log.d(TAG, "Insert successful into $tableName")
                 true
             } else {
                 val body = response.body?.string()
+                QueryInstrumentation.log("POST", url, 0, false, "Code ${response.code}: $body")
                 Log.e(TAG, "Failed to POST to $tableName: Code ${response.code}, Body: $body")
                 false
             }
         } catch (ex: Exception) {
+            QueryInstrumentation.log("POST", url, 0, false, ex.message ?: ex.toString())
             Log.e(TAG, "Exception during POST to $tableName", ex)
             false
         }
@@ -102,14 +112,17 @@ object JarvisInsightsClient {
         return try {
             val response = client.newCall(request).execute()
             if (response.isSuccessful) {
+                QueryInstrumentation.log("PATCH", url, 1, true)
                 Log.d(TAG, "Update successful for $tableName with query $queryParam")
                 true
             } else {
                 val body = response.body?.string()
+                QueryInstrumentation.log("PATCH", url, 0, false, "Code ${response.code}: $body")
                 Log.e(TAG, "Failed to PATCH $tableName: Code ${response.code}, Body: $body")
                 false
             }
         } catch (ex: Exception) {
+            QueryInstrumentation.log("PATCH", url, 0, false, ex.message ?: ex.toString())
             Log.e(TAG, "Exception during PATCH to $tableName", ex)
             false
         }
