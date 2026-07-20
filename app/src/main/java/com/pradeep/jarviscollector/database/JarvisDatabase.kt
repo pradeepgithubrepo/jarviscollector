@@ -15,6 +15,12 @@ import com.pradeep.jarviscollector.model.FactInsightEntity
 import com.pradeep.jarviscollector.model.NotificationEntity
 import com.pradeep.jarviscollector.model.FinancialInsightEntity
 import com.pradeep.jarviscollector.model.SyncDiagnosticsEntity
+import com.pradeep.jarviscollector.model.ReminderEntity
+import com.pradeep.jarviscollector.model.MonthlySpendingSummaryEntity
+import com.pradeep.jarviscollector.model.MonthlyCategorySpendEntity
+import com.pradeep.jarviscollector.model.LifecycleItemEntity
+import com.pradeep.jarviscollector.model.VaultCategoryEntity
+import com.pradeep.jarviscollector.model.VaultEntryEntity
 
 @Database(
     entities = [
@@ -28,9 +34,15 @@ import com.pradeep.jarviscollector.model.SyncDiagnosticsEntity
         FactInsightEntity::class,
         NotificationEntity::class,
         FinancialInsightEntity::class,
-        SyncDiagnosticsEntity::class
+        SyncDiagnosticsEntity::class,
+        ReminderEntity::class,
+        MonthlySpendingSummaryEntity::class,
+        MonthlyCategorySpendEntity::class,
+        LifecycleItemEntity::class,
+        VaultCategoryEntity::class,
+        VaultEntryEntity::class
     ],
-    version = 6,
+    version = 13,
     exportSchema = false
 )
 abstract class JarvisDatabase : RoomDatabase() {
@@ -46,6 +58,13 @@ abstract class JarvisDatabase : RoomDatabase() {
     abstract fun notificationDao(): NotificationDao
     abstract fun financialInsightDao(): FinancialInsightDao
     abstract fun syncDiagnosticsDao(): SyncDiagnosticsDao
+    abstract fun reminderDao(): ReminderDao
+    abstract fun monthlySpendingSummaryDao(): MonthlySpendingSummaryDao
+    abstract fun monthlyCategorySpendDao(): MonthlyCategorySpendDao
+    abstract fun lifecycleItemDao(): LifecycleItemDao
+    abstract fun vaultCategoryDao(): VaultCategoryDao
+    abstract fun vaultEntryDao(): VaultEntryDao
+
 
     companion object {
         private var INSTANCE: JarvisDatabase? = null

@@ -15,10 +15,16 @@ import com.pradeep.jarviscollector.model.NotificationEntity
 import com.pradeep.jarviscollector.model.FinancialInsightEntity
 import com.pradeep.jarviscollector.model.UserPreferenceEntity
 import com.pradeep.jarviscollector.model.UserActionEntity
+import com.pradeep.jarviscollector.model.ReminderEntity
 import com.pradeep.jarviscollector.ui.*
+import com.pradeep.jarviscollector.ui.splash.SplashScreen
+import com.pradeep.jarviscollector.ui.name_selection.NameSelectionScreen
+import com.pradeep.jarviscollector.utils.AppPreferences
 import com.pradeep.jarviscollector.ui.facts.FactsScreen
+import com.pradeep.jarviscollector.ui.facts.FactDetailScreen
 import com.pradeep.jarviscollector.ui.notification.NotificationCenterScreen
 import com.pradeep.jarviscollector.ui.actioncenter.ActionCenterScreen
+import com.pradeep.jarviscollector.ui.todo.TaskDetailScreen
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.LaunchedEffect
@@ -30,11 +36,13 @@ import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.Text
 
+
 @Composable
 fun JarvisNavHost(
     navController: NavHostController,
     ownerName: String,
     todos: List<TodoEntity>,
+    reminders: List<ReminderEntity>,
     snapshotInsights: List<FinancialInsightEntity>,
     actionRequiredInsights: List<FinancialInsightEntity>,
     subscriptionInsights: List<FinancialInsightEntity>,
@@ -60,6 +68,11 @@ fun JarvisNavHost(
     onOwnerNameChange: (String) -> Unit,
     onLoadInsights: () -> Unit,
     onCompleteTodo: (String) -> Unit,
+    onAddTodoClick: () -> Unit,
+    onVoiceTodoClick: () -> Unit,
+    onConvertFactToTodo: (String, String, String, Long?) -> Unit,
+    onSwipeFactSoftDelete: (String) -> Unit,
+    onSwipeFactHardDelete: (String, (Boolean) -> Unit) -> Unit,
     onToggleFactRead: (String, Boolean) -> Unit,
     onMarkFyiRead: (String, Boolean) -> Unit,
     onDismissFyi: (String) -> Unit,
@@ -71,7 +84,9 @@ fun JarvisNavHost(
     onConfirmInsight: (String) -> Unit,
     onDismissInsight: (String) -> Unit,
     onCorrectInsight: (String, String, Double) -> Unit,
-    onSnoozeTodo: (String) -> Unit,
+    onSnoozeTodo: (String, Int) -> Unit,
+    onSetReminder: (String, Long, Int, String) -> Unit,
+    onRemoveReminder: (String) -> Unit,
     onDeleteTodo: (String) -> Unit,
     onLoadRoom: () -> Unit,
     onExportJson: () -> Unit,
@@ -93,9 +108,31 @@ fun JarvisNavHost(
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route,
+        startDestination = Screen.Splash.route,
         modifier = modifier
     ) {
+        // Splash screen composable
+        composable(Screen.Splash.route) {
+            SplashScreen(
+                ownerName = ownerName,
+                onNavigateToHome = {
+                    if (ownerName.isBlank()) {
+                        navController.navigate(Screen.NameSelection.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(Screen.Splash.route) { inclusive = true }
+                        }
+                    }
+                }
+            )
+        }
+        // Name selection screen composable
+        composable(Screen.NameSelection.route) {
+            NameSelectionScreen(navController = navController, onOwnerNameChange = onOwnerNameChange)
+        }
+
         composable(Screen.Home.route) {
             HomeScreen(
                 ownerName = ownerName,
@@ -201,6 +238,8 @@ fun JarvisNavHost(
                 onOwnerNameChange = onOwnerNameChange,
                 onLoadInsights = onLoadInsights,
                 onCompleteTodo = onCompleteTodo,
+                onAddTodoClick = onAddTodoClick,
+                onVoiceTodoClick = onVoiceTodoClick,
                 onNavigateToTaskDetail = { id ->
                     try {
                         navController.navigate(Screen.TaskDetail.createRoute(id))
@@ -214,6 +253,20 @@ fun JarvisNavHost(
                     } catch (e: Exception) {
                         android.util.Log.e("Navigation", "Screen unavailable: fact_detail", e)
                     }
+                },
+                onNavigateToLifecycleEvents = {
+                    try {
+                        navController.navigate(Screen.LifecycleEvents.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: lifecycle_events", e)
+                    }
+                },
+                onNavigateToVault = {
+                    try {
+                        navController.navigate(Screen.VaultCategories.route)
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: vault", e)
+                    }
                 }
             )
         }
@@ -224,16 +277,48 @@ fun JarvisNavHost(
             )
         }
 
+        composable(Screen.VaultCategories.route) {
+            com.pradeep.jarviscollector.ui.vault.VaultCategoriesScreen(
+                onBack = { navController.popBackStack() },
+                onCategoryClick = { catId, catName ->
+                    try {
+                        navController.navigate(Screen.VaultEntries.createRoute(catId, catName))
+                    } catch (e: Exception) {
+                        android.util.Log.e("Navigation", "Screen unavailable: vault_entries", e)
+                    }
+                }
+            )
+        }
+
+        composable(Screen.VaultEntries.route) { backStackEntry ->
+            val categoryId = backStackEntry.arguments?.getString("categoryId") ?: ""
+            val categoryName = backStackEntry.arguments?.getString("categoryName") ?: "Vault Entries"
+            com.pradeep.jarviscollector.ui.vault.VaultEntriesScreen(
+                categoryId = categoryId,
+                categoryName = categoryName,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable(Screen.Tasks.route) {
             TodoScreen(
                 todos = todos,
+                reminders = reminders,
                 onComplete = onCompleteTodo,
                 onSnooze = onSnoozeTodo,
+                onSetReminder = onSetReminder,
+                onRemoveReminder = onRemoveReminder,
                 onDelete = onDeleteTodo,
+                onAddTodoClick = onAddTodoClick,
+                onVoiceTodoClick = onVoiceTodoClick,
+                onNavigateToTaskDetail = { id ->
+                    navController.navigate(Screen.TaskDetail.createRoute(id))
+                },
                 onNavigateToSignalExplorer = onNavigateToSignalExplorer,
                 onBack = { navController.popBackStack() }
             )
         }
+
 
         composable(Screen.Fyi.route) {
             FyiScreen(
@@ -292,15 +377,42 @@ fun JarvisNavHost(
                     } catch (e: Exception) {
                         android.util.Log.e("Navigation", "Screen unavailable: transaction_detail", e)
                     }
+                },
+                onNavigateToMonthlyLedger = { month, cat ->
+                    navController.navigate(Screen.MonthlyLedger.createRoute(month, cat))
                 }
+            )
+        }
+
+        composable(Screen.MonthlyLedger.route) { backStackEntry ->
+            val monthKey = backStackEntry.arguments?.getString("monthKey") ?: ""
+            val category = backStackEntry.arguments?.getString("category") ?: "all"
+            com.pradeep.jarviscollector.ui.financial.MonthlyLedgerScreen(
+                monthKey = monthKey,
+                category = category,
+                onBack = { navController.popBackStack() },
+                onNavigateToTransactionDetail = { id ->
+                    navController.navigate(Screen.TransactionDetail.createRoute(id))
+                }
+            )
+        }
+
+        composable(Screen.LifecycleEvents.route) {
+            com.pradeep.jarviscollector.ui.lifecycle.LifecycleEventsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 
         composable(Screen.Facts.route) {
             FactsScreen(
                 facts = facts,
+                onNavigateToFactDetail = { id ->
+                    navController.navigate(Screen.FactDetail.createRoute(id))
+                },
                 onToggleRead = onToggleFactRead,
                 onNavigateToSignalExplorer = onNavigateToSignalExplorer,
+                onSwipeSoftDelete = onSwipeFactSoftDelete,
+                onSwipeHardDelete = onSwipeFactHardDelete,
                 onBack = { navController.popBackStack() }
             )
         }
@@ -398,25 +510,36 @@ fun JarvisNavHost(
             arguments = listOf(androidx.navigation.navArgument("id") { type = androidx.navigation.NavType.StringType })
         ) { backStackEntry ->
             val id = backStackEntry.arguments?.getString("id") ?: ""
-            Box(
-                modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Task Detail Screen for ID: $id", color = Color.White)
-            }
+            TaskDetailScreen(
+                todoId = id,
+                todos = todos,
+                reminders = reminders,
+                onComplete = onCompleteTodo,
+                onSnooze = onSnoozeTodo,
+                onSetReminder = onSetReminder,
+                onRemoveReminder = onRemoveReminder,
+                onDelete = onDeleteTodo,
+                onNavigateToSignalExplorer = onNavigateToSignalExplorer,
+                onBack = { navController.popBackStack() }
+            )
         }
+
 
         composable(
             route = Screen.FactDetail.route,
             arguments = listOf(androidx.navigation.navArgument("id") { type = androidx.navigation.NavType.StringType })
         ) { backStackEntry ->
             val id = backStackEntry.arguments?.getString("id") ?: ""
-            Box(
-                modifier = Modifier.fillMaxSize().background(Color(0xFF0F172A)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("Fact Detail Screen for ID: $id", color = Color.White)
-            }
+            FactDetailScreen(
+                factId = id,
+                facts = facts,
+                onConvertTodo = onConvertFactToTodo,
+                onDismissFact = { factId ->
+                    onDismissInsight(factId)
+                    navController.popBackStack()
+                },
+                onBack = { navController.popBackStack() }
+            )
         }
 
         composable(

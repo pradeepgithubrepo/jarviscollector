@@ -72,4 +72,35 @@ object FactRepository {
         }
         success
     }
+
+    suspend fun deleteFactSoft(context: Context, id: String) = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        try {
+            getDao(context).deleteById(id)
+            Log.d(TAG, "Fact soft-deleted locally: $id")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error soft-deleting fact locally", e)
+        }
+    }
+
+    suspend fun deleteFactHard(context: Context, id: String): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        // 1. Call Supabase delete
+        val success = JarvisInsightsClient.deleteRow(
+            "information_items",
+            "id=eq.$id",
+            "jarvis_insights_schemav1"
+        )
+
+        if (success) {
+            // 2. Delete locally on success
+            try {
+                getDao(context).deleteById(id)
+                Log.d(TAG, "Fact hard-deleted from Supabase and locally: $id")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error hard-deleting fact locally", e)
+            }
+        } else {
+            Log.e(TAG, "Failed to hard-delete from Supabase. Room cache not modified.")
+        }
+        success
+    }
 }

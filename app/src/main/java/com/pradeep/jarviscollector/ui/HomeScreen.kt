@@ -3,6 +3,7 @@ package com.pradeep.jarviscollector.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -62,13 +63,21 @@ fun HomeScreen(
     onOwnerNameChange: (String) -> Unit,
     onLoadInsights: () -> Unit,
     onCompleteTodo: (String) -> Unit,
+    onAddTodoClick: () -> Unit = {},
+    onVoiceTodoClick: () -> Unit = {},
     onNavigateToTaskDetail: (String) -> Unit = {},
     onNavigateToFactDetail: (String) -> Unit = {},
+    onNavigateToLifecycleEvents: () -> Unit = {},
+    onNavigateToVault: () -> Unit = {},
     modifier: Modifier = Modifier,
     dashboardViewModel: HomeDashboardViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val mainScroll = rememberScrollState()
     val quickActionScroll = rememberScrollState()
+
+    var showVaultPasswordDialog by remember { mutableStateOf(false) }
+    var vaultPasswordInput by remember { mutableStateOf("") }
+    var vaultPasswordError by remember { mutableStateOf<String?>(null) }
     val columnsScroll = rememberScrollState()
     val context = LocalContext.current
 
@@ -200,6 +209,168 @@ fun HomeScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Temporary shortcut button for Vault
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF8B5CF6).copy(alpha = 0.15f))
+                .clickable {
+                    vaultPasswordInput = ""
+                    vaultPasswordError = null
+                    showVaultPasswordDialog = true
+                }
+                .border(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = "Vault",
+                        tint = Color(0xFF8B5CF6),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "🔐 Vault (Secure Family Information)",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Secure accounts, investments, insurance policies & assets",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = "Go",
+                    tint = Color(0xFF8B5CF6),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        if (showVaultPasswordDialog) {
+            AlertDialog(
+                onDismissRequest = { showVaultPasswordDialog = false },
+                containerColor = Color(0xFF1E293B),
+                shape = RoundedCornerShape(20.dp),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF8B5CF6))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Vault Security Check", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Enter your Vault access password to continue.", color = Color(0xFF94A3B8), fontSize = 13.sp)
+                        OutlinedTextField(
+                            value = vaultPasswordInput,
+                            onValueChange = {
+                                vaultPasswordInput = it
+                                vaultPasswordError = null
+                            },
+                            label = { Text("Password", color = Color(0xFF94A3B8)) },
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            isError = vaultPasswordError != null,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = Color(0xFF8B5CF6),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        if (vaultPasswordError != null) {
+                            Text(vaultPasswordError!!, color = Color(0xFFEF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (vaultPasswordInput == "charanammu") {
+                                showVaultPasswordDialog = false
+                                onNavigateToVault()
+                            } else {
+                                vaultPasswordError = "Invalid Password"
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Unlock Vault", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showVaultPasswordDialog = false }) {
+                        Text("Cancel", color = Color(0xFF94A3B8))
+                    }
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Temporary shortcut button for Lifecycle Events
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF6366F1).copy(alpha = 0.15f))
+                .clickable { onNavigateToLifecycleEvents() }
+                .border(1.dp, Color(0xFF6366F1).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.DateRange,
+                        contentDescription = "Lifecycles",
+                        tint = Color(0xFF6366F1),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Lifecycle Events Tracker (NEW)",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Configure recurring insurances, checkups & renewals",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = "Go",
+                    tint = Color(0xFF6366F1),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // QUICK ACTIONS SECTION
@@ -227,7 +398,7 @@ fun HomeScreen(
                 text = "Add To-Do",
                 icon = Icons.Default.CheckCircle,
                 backgroundColor = Color(0xFF2563EB),
-                onClick = onNavigateToTodos
+                onClick = onAddTodoClick
             )
             QuickActionButton(
                 text = "Add Note",
@@ -242,10 +413,16 @@ fun HomeScreen(
                 onClick = onNavigateToFyi
             )
             QuickActionButton(
-                text = "Voice Note",
+                text = "Voice To-Do",
                 icon = Icons.Default.PlayArrow,
                 backgroundColor = Color(0xFF059669),
-                onClick = {}
+                onClick = onVoiceTodoClick
+            )
+            QuickActionButton(
+                text = "Lifecycles",
+                icon = Icons.Default.DateRange,
+                backgroundColor = Color(0xFF8B5CF6),
+                onClick = onNavigateToLifecycleEvents
             )
             QuickActionButton(
                 text = "More Options",

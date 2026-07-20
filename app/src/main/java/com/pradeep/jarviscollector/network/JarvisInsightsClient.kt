@@ -19,17 +19,21 @@ object JarvisInsightsClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /**
-     * Fetch all records from a Supabase table.
-     */
-    fun fetchTable(tableName: String): String? {
-        val url = "$SUPABASE_URL/rest/v1/$tableName?select=*"
-        Log.d(TAG, "GET request to: $url")
+      * Fetch all records from a Supabase table.
+      */
+    fun fetchTable(tableName: String, schemaProfile: String = "jarvis_insights_schema"): String? {
+        val url = if (tableName.contains("?")) {
+            "$SUPABASE_URL/rest/v1/$tableName&select=*"
+        } else {
+            "$SUPABASE_URL/rest/v1/$tableName?select=*"
+        }
+        Log.d(TAG, "GET request to: $url (Schema: $schemaProfile)")
 
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", API_KEY)
             .addHeader("Authorization", "Bearer $API_KEY")
-            .addHeader("Accept-Profile", "jarvis_insights_schema")
+            .addHeader("Accept-Profile", schemaProfile)
             .get()
             .build()
 
@@ -57,18 +61,18 @@ object JarvisInsightsClient {
     }
 
     /**
-     * Insert/Upsert a record in a Supabase table.
-     */
-    fun insertRow(tableName: String, jsonPayload: String): Boolean {
+      * Insert/Upsert a record in a Supabase table.
+      */
+    fun insertRow(tableName: String, jsonPayload: String, schemaProfile: String = "jarvis_insights_schema"): Boolean {
         val url = "$SUPABASE_URL/rest/v1/$tableName"
-        Log.d(TAG, "POST request to: $url, Payload: $jsonPayload")
+        Log.d(TAG, "POST request to: $url, Payload: $jsonPayload (Schema: $schemaProfile)")
 
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", API_KEY)
             .addHeader("Authorization", "Bearer $API_KEY")
-            .addHeader("Content-Profile", "jarvis_insights_schema")
-            .addHeader("Accept-Profile", "jarvis_insights_schema")
+            .addHeader("Content-Profile", schemaProfile)
+            .addHeader("Accept-Profile", schemaProfile)
             .addHeader("Prefer", "resolution=merge-duplicates")
             .post(jsonPayload.toRequestBody(jsonMediaType))
             .build()
@@ -93,19 +97,19 @@ object JarvisInsightsClient {
     }
 
     /**
-     * Update/Patch a record in a Supabase table.
-     * Example queryParam: "todo_id=eq.123-456"
-     */
-    fun updateRow(tableName: String, queryParam: String, jsonPayload: String): Boolean {
+      * Update/Patch a record in a Supabase table.
+      * Example queryParam: "todo_id=eq.123-456"
+      */
+    fun updateRow(tableName: String, queryParam: String, jsonPayload: String, schemaProfile: String = "jarvis_insights_schema"): Boolean {
         val url = "$SUPABASE_URL/rest/v1/$tableName?$queryParam"
-        Log.d(TAG, "PATCH request to: $url, Payload: $jsonPayload")
+        Log.d(TAG, "PATCH request to: $url, Payload: $jsonPayload (Schema: $schemaProfile)")
 
         val request = Request.Builder()
             .url(url)
             .addHeader("apikey", API_KEY)
             .addHeader("Authorization", "Bearer $API_KEY")
-            .addHeader("Content-Profile", "jarvis_insights_schema")
-            .addHeader("Accept-Profile", "jarvis_insights_schema")
+            .addHeader("Content-Profile", schemaProfile)
+            .addHeader("Accept-Profile", schemaProfile)
             .patch(jsonPayload.toRequestBody(jsonMediaType))
             .build()
 
@@ -127,4 +131,40 @@ object JarvisInsightsClient {
             false
         }
     }
+
+    /**
+      * Delete a record in a Supabase table.
+      */
+    fun deleteRow(tableName: String, queryParam: String, schemaProfile: String = "jarvis_insights_schema"): Boolean {
+        val url = "$SUPABASE_URL/rest/v1/$tableName?$queryParam"
+        Log.d(TAG, "DELETE request to: $url (Schema: $schemaProfile)")
+
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("apikey", API_KEY)
+            .addHeader("Authorization", "Bearer $API_KEY")
+            .addHeader("Content-Profile", schemaProfile)
+            .addHeader("Accept-Profile", schemaProfile)
+            .delete()
+            .build()
+
+        return try {
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                QueryInstrumentation.log("DELETE", url, 1, true)
+                Log.d(TAG, "Delete successful from $tableName with query $queryParam")
+                true
+            } else {
+                val body = response.body?.string()
+                QueryInstrumentation.log("DELETE", url, 0, false, "Code ${response.code}: $body")
+                Log.e(TAG, "Failed to DELETE from $tableName: Code ${response.code}, Body: $body")
+                false
+            }
+        } catch (ex: Exception) {
+            QueryInstrumentation.log("DELETE", url, 0, false, ex.message ?: ex.toString())
+            Log.e(TAG, "Exception during DELETE from $tableName", ex)
+            false
+        }
+    }
 }
+

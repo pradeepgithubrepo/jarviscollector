@@ -1,290 +1,459 @@
 package com.pradeep.jarviscollector.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pradeep.jarviscollector.model.TodoEntity
+import com.pradeep.jarviscollector.model.ReminderEntity
+import java.text.SimpleDateFormat
+import java.util.*
+
+enum class TodoFilter {
+    ALL, TODAY, OVERDUE, COMPLETED
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TodoScreen(
     todos: List<TodoEntity>,
+    reminders: List<ReminderEntity>,
     onComplete: (String) -> Unit,
-    onSnooze: (String) -> Unit,
+    onSnooze: (String, Int) -> Unit,
+    onSetReminder: (String, Long, Int, String) -> Unit,
+    onRemoveReminder: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onAddTodoClick: () -> Unit,
+    onVoiceTodoClick: () -> Unit,
+    onNavigateToTaskDetail: (String) -> Unit,
     onNavigateToSignalExplorer: (String, String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabTitles = listOf("Pending", "Completed", "Due Scheduled")
+    var activeFilter by remember { mutableStateOf(TodoFilter.ALL) }
+    var showSnoozeDialogForId by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
 
-    val filteredTodos = when (selectedTab) {
-        0 -> todos.filter { it.status == "OPEN" || it.status == "SNOOZED" }
-        1 -> todos.filter { it.status == "COMPLETED" }
-        2 -> todos.filter { (it.status == "OPEN" || it.status == "SNOOZED") && !it.due_date.isNullOrBlank() }
-        else -> todos
+    val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+    // Load active tasks
+    val filteredList = remember(todos, activeFilter) {
+        val list = todos.filter { it.status.uppercase(Locale.US) != "DISMISSED" }
+        when (activeFilter) {
+            TodoFilter.ALL -> list
+            TodoFilter.TODAY -> list.filter {
+                it.due_date == todayStr && it.status.uppercase(Locale.US) != "COMPLETED"
+            }
+            TodoFilter.OVERDUE -> list.filter {
+                val due = it.due_date
+                due != null && due < todayStr && it.status.uppercase(Locale.US) != "COMPLETED"
+            }
+            TodoFilter.COMPLETED -> list.filter { it.status.uppercase(Locale.US) == "COMPLETED" }
+        }
     }
 
-    Column(
+    // Sequentially trigger pickers for setting task alarm reminder
+    fun triggerReminderPickers(todoId: String) {
+        val calendar = Calendar.getInstance()
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                calendar.set(Calendar.YEAR, year)
+                calendar.set(Calendar.MONTH, month)
+                calendar.set(Calendar.DAY_OF_MONTH, dayOfMonth)
+
+                TimePickerDialog(
+                    context,
+                    { _, hourOfDay, minute ->
+                        calendar.set(Calendar.HOUR_OF_DAY, hourOfDay)
+                        calendar.set(Calendar.MINUTE, minute)
+                        calendar.set(Calendar.SECOND, 0)
+                        calendar.set(Calendar.MILLISECOND, 0)
+
+                        onSetReminder(todoId, calendar.timeInMillis, 0, "DEFAULT")
+                    },
+                    calendar.get(Calendar.HOUR_OF_DAY),
+                    calendar.get(Calendar.MINUTE),
+                    false
+                ).show()
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("ToDos", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { /* Search */ }) {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Search", tint = Color.White)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+            )
+        },
+        containerColor = Color.Transparent, // Gradient drawn on wrapper below
+        floatingActionButton = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Voice Task FAB
+                SmallFloatingActionButton(
+                    onClick = onVoiceTodoClick,
+                    containerColor = Color(0xFF10B981),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Voice Task", modifier = Modifier.size(18.dp))
+                }
+
+                // Text Add Task FAB
+                FloatingActionButton(
+                    onClick = onAddTodoClick,
+                    containerColor = Color(0xFF6366F1),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = "Add Task")
+                }
+            }
+        },
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = "Todo Agent",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF0F172A), Color(0xFF070B14))
                 )
-            },
-            navigationIcon = {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent
             )
-        )
-
-        TabRow(
-            selectedTabIndex = selectedTab,
-            containerColor = Color.Transparent,
-            divider = {},
-            indicator = { tabPositions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
         ) {
-            tabTitles.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = {
-                        Text(
-                            text = title,
-                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 14.sp
+            // Horizontal Filter Chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TodoFilter.values().forEach { filter ->
+                    val isSelected = activeFilter == filter
+                    val label = when (filter) {
+                        TodoFilter.ALL -> "Total"
+                        TodoFilter.TODAY -> "Today"
+                        TodoFilter.OVERDUE -> "Overdue"
+                        TodoFilter.COMPLETED -> "Completed"
+                    }
+                    val count = when (filter) {
+                        TodoFilter.ALL -> todos.count { it.status.uppercase(Locale.US) != "DISMISSED" }
+                        TodoFilter.TODAY -> todos.count { it.due_date == todayStr && it.status.uppercase(Locale.US) != "COMPLETED" }
+                        TodoFilter.OVERDUE -> todos.count { val due = it.due_date; due != null && due < todayStr && it.status.uppercase(Locale.US) != "COMPLETED" }
+                        TodoFilter.COMPLETED -> todos.count { it.status.uppercase(Locale.US) == "COMPLETED" }
+                    }
+
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { activeFilter = filter },
+                        label = { Text("$label ($count)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = Color(0xFF1E293B),
+                            selectedContainerColor = Color(0xFF6366F1),
+                            labelColor = Color(0xFF94A3B8),
+                            selectedLabelColor = Color.White
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = Color.White.copy(alpha = 0.05f),
+                            selectedBorderColor = Color(0xFF6366F1),
+                            borderWidth = 1.dp,
+                            selectedBorderWidth = 1.dp
                         )
-                    },
-                    selectedContentColor = MaterialTheme.colorScheme.primary,
-                    unselectedContentColor = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (filteredTodos.isEmpty()) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f)
-            ) {
-                Text(
-                    text = "No todos found in this category.",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(filteredTodos, key = { it.todo_id }) { todo ->
-                    TodoCard(
-                        todo = todo,
-                        onComplete = { onComplete(todo.todo_id) },
-                        onSnooze = { onSnooze(todo.todo_id) },
-                        onDelete = { onDelete(todo.todo_id) },
-                        onViewEvidence = { onNavigateToSignalExplorer("todo", todo.todo_id) }
                     )
                 }
             }
+
+            if (filteredList.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1.0f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No tasks found",
+                        color = Color(0xFF64748B),
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1.0f),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(filteredList, key = { it.todo_id }) { todo ->
+                        val taskReminder = reminders.find { it.reminder_id == todo.todo_id }
+                        TodoV2Card(
+                            todo = todo,
+                            reminder = taskReminder,
+                            onClick = { onNavigateToTaskDetail(todo.todo_id) },
+                            onComplete = { onComplete(todo.todo_id) },
+                            onSnooze = { showSnoozeDialogForId = todo.todo_id },
+                            onReminder = { triggerReminderPickers(todo.todo_id) },
+                            onDelete = { onDelete(todo.todo_id) }
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    // --- Snooze Alarm Dialog ---
+    if (showSnoozeDialogForId != null) {
+        val id = showSnoozeDialogForId!!
+        AlertDialog(
+            onDismissRequest = { showSnoozeDialogForId = null },
+            containerColor = Color(0xFF1E293B),
+            title = { Text("Snooze Alarm", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(
+                        15 to "15 minutes",
+                        30 to "30 minutes",
+                        60 to "1 hour",
+                        120 to "2 hours"
+                    ).forEach { (mins, label) ->
+                        Button(
+                            onClick = {
+                                onSnooze(id, mins)
+                                showSnoozeDialogForId = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(label, color = Color.White, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSnoozeDialogForId = null }) {
+                    Text("Cancel", color = Color.White)
+                }
+            }
+        )
     }
 }
 
 @Composable
-fun TodoCard(
+fun TodoV2Card(
     todo: TodoEntity,
+    reminder: ReminderEntity?,
+    onClick: () -> Unit,
     onComplete: () -> Unit,
     onSnooze: () -> Unit,
-    onDelete: () -> Unit,
-    onViewEvidence: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    onReminder: () -> Unit,
+    onDelete: () -> Unit
 ) {
-    val isCompleted = todo.status == "COMPLETED"
-    
-    Card(
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(
-            1.dp,
-            Color.White.copy(alpha = 0.05f)
-        ),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if (!todo.priority.isNullOrBlank()) {
-                        val badgeColor = when (todo.priority.lowercase()) {
-                            "high" -> Color(0xFFEF4444)
-                            "medium" -> Color(0xFFF59E0B)
-                            else -> Color(0xFF3B82F6)
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = badgeColor.copy(alpha = 0.15f),
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        ) {
-                            Text(
-                                text = todo.priority.uppercase(),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = badgeColor,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
+    val isCompleted = todo.status.uppercase(Locale.US) == "COMPLETED"
 
+    val priorityColor = when (todo.priority?.uppercase(Locale.US)) {
+        "CRITICAL", "URGENT" -> Color(0xFFEF4444)
+        "HIGH" -> Color(0xFFF97316)
+        "MEDIUM" -> Color(0xFFF59E0B)
+        else -> Color(0xFF10B981) // LOW
+    }
+
+    var showMenu by remember { mutableStateOf(false) }
+
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF1E293B).copy(alpha = 0.5f)
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left priority status indicator line
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(priorityColor)
+            )
+
+            Column(
+                modifier = Modifier
+                    .weight(1.0f)
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = todo.title ?: "Untitled Task",
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
+                        color = if (isCompleted) Color(0xFF64748B) else Color.White,
                         textDecoration = if (isCompleted) TextDecoration.LineThrough else null,
-                        color = if (isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
+                        modifier = Modifier.weight(1f)
                     )
 
-                    if (!todo.description.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                    // Priority Badge
+                    Surface(
+                        color = priorityColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
                         Text(
-                            text = todo.description,
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3
+                            text = todo.priority ?: "LOW",
+                            color = priorityColor,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (!todo.due_date.isNullOrBlank()) {
-                        Text(
-                            text = "Due: ${todo.due_date}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    if (onViewEvidence != null) {
-                        TextButton(
-                            onClick = onViewEvidence,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("Evidence", fontSize = 11.sp)
-                        }
-                    }
-                }
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (!isCompleted) {
-                        IconButton(
-                            onClick = onSnooze,
-                            colors = IconButtonDefaults.iconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Snooze",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // Due Date Info
+                        if (todo.due_date != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = "Due Date",
+                                    tint = Color(0xFF818CF8),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Due: ${todo.due_date}",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF94A3B8)
+                                )
+                            }
+                        }
+
+                        // Active Alarm info
+                        if (reminder != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Active Alarm",
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                val sdf = SimpleDateFormat("dd-MMM h:mm a", Locale.US)
+                                val timeStr = sdf.format(Date(reminder.scheduled_timestamp))
+                                Text(
+                                    text = "Alarm: $timeStr",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFFBBF24),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
                     }
 
-                    IconButton(
-                        onClick = onComplete,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = if (isCompleted) MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Complete",
-                            tint = if (isCompleted) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
+                    // Card options menu trigger
+                    Box {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Actions", tint = Color(0xFF94A3B8))
+                        }
 
-                    IconButton(
-                        onClick = onDelete,
-                        colors = IconButtonDefaults.iconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
-                        ),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            modifier = Modifier.background(Color(0xFF1E293B))
+                        ) {
+                            if (!isCompleted) {
+                                DropdownMenuItem(
+                                    text = { Text("Complete Task", color = Color.White) },
+                                    leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, tint = Color(0xFF10B981)) },
+                                    onClick = {
+                                        onComplete()
+                                        showMenu = false
+                                    }
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Snooze Alarm", color = Color.White) },
+                                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null, tint = Color(0xFF3B82F6)) },
+                                onClick = {
+                                    onSnooze()
+                                    showMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Set Reminder", color = Color.White) },
+                                leadingIcon = { Icon(Icons.Default.Notifications, contentDescription = null, tint = Color(0xFFF59E0B)) },
+                                onClick = {
+                                    onReminder()
+                                    showMenu = false
+                                }
+                            )
+                            Divider(color = Color(0xFF334155))
+                            DropdownMenuItem(
+                                text = { Text("Delete Task", color = Color(0xFFEF4444)) },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFEF4444)) },
+                                onClick = {
+                                    onDelete()
+                                    showMenu = false
+                                }
+                            )
+                        }
                     }
                 }
             }

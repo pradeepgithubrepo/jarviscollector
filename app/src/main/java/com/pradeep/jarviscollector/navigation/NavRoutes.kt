@@ -33,4 +33,15 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
     object TransactionDetail : Screen("transaction_detail/{id}", "Transaction Detail") {
         fun createRoute(id: String) = "transaction_detail/$id"
     }
+    object MonthlyLedger : Screen("monthly_ledger/{monthKey}/{category}", "Monthly Ledger") {
+        fun createRoute(monthKey: String, category: String = "all") = "monthly_ledger/$monthKey/$category"
+    }
+    object LifecycleEvents : Screen("lifecycle_events", "Lifecycle Events")
+    object VaultCategories : Screen("vault", "Vault Categories")
+    object VaultEntries : Screen("vault/entries/{categoryId}/{categoryName}", "Vault Entries") {
+        fun createRoute(categoryId: String, categoryName: String) = "vault/entries/$categoryId/$categoryName"
+    }
+    // Transient routes — no icon needed (never appear in bottom nav)
+    object NameSelection : Screen("name_selection", "Select User")
+    object Splash : Screen("splash", "Splash")
 }

@@ -13,6 +13,7 @@ import com.pradeep.jarviscollector.model.FactInsightEntity
 import com.pradeep.jarviscollector.model.NotificationEntity
 import com.pradeep.jarviscollector.model.UserActionEntity
 import com.pradeep.jarviscollector.model.SyncDiagnosticsEntity
+import com.pradeep.jarviscollector.model.LifecycleItemEntity
 import com.pradeep.jarviscollector.network.JarvisInsightsClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -77,15 +78,21 @@ object InsightSyncService {
             Log.d(TAG, "Starting direct Supabase insights schema pull...")
 
             // 1. Fetch tables from Supabase REST endpoints
-            val todosJson = JarvisInsightsClient.fetchTable("todo_items")
-            val financialJson = JarvisInsightsClient.fetchTable("financial_events")
+            val todosJson = JarvisInsightsClient.fetchTable("tasks", "jarvis_insights_schemav1")
+            val financialJson = JarvisInsightsClient.fetchTable("financial_transactions", "jarvis_insights_schemav1")
             val fyiJson = JarvisInsightsClient.fetchTable("fyi_events")
             val preferencesJson = JarvisInsightsClient.fetchTable("user_preferences")
             val dailyBriefsJson = JarvisInsightsClient.fetchTable("daily_briefs")
-            val factsJson = JarvisInsightsClient.fetchTable("facts")
+            val factsJson = JarvisInsightsClient.fetchTable("information_items", "jarvis_insights_schemav1")
             val notificationsJson = null // Generated locally from signals / insights
             val userActionsJson = JarvisInsightsClient.fetchTable("user_actions")
             val financialInsightsJson = JarvisInsightsClient.fetchTable("financial_facts")
+            val monthlySpendingJson = JarvisInsightsClient.fetchTable("monthly_spending_summary", "jarvis_insights_schemav1")
+            val monthlyCategorySpendJson = JarvisInsightsClient.fetchTable("monthly_category_spend", "jarvis_insights_schemav1")
+            val lifecycleJson = JarvisInsightsClient.fetchTable("lifecycle_items", "jarvis_insights_schemav1")
+            val vaultCategoriesJson = JarvisInsightsClient.fetchTable("vault_categories", "jarvis_insights_schemav1")
+            val vaultEntriesJson = JarvisInsightsClient.fetchTable("vault_entries", "jarvis_insights_schemav1")
+
 
             val db = JarvisDatabase.getDatabase(context)
 
@@ -109,17 +116,26 @@ object InsightSyncService {
                         val list = mutableListOf<TodoEntity>()
                         for (i in 0 until array.length()) {
                             val obj = array.getJSONObject(i)
+                            
+                            // Map fields from jarvis_insights_schemav1.tasks
+                            val rawDue = if (obj.isNull("due_datetime")) null else obj.getString("due_datetime")
+                            val cleanDueDate = if (rawDue != null && rawDue.contains("T")) rawDue.split("T")[0] else rawDue
+
                             list.add(
                                 TodoEntity(
-                                    todo_id = obj.getString("todo_id"),
+                                    todo_id = obj.getString("id"),
                                     title = if (obj.isNull("title")) null else obj.getString("title"),
                                     description = if (obj.isNull("description")) null else obj.getString("description"),
-                                    priority = if (obj.isNull("priority")) null else obj.getString("priority"),
+                                    category = if (obj.isNull("source_type")) "General" else obj.getString("source_type"),
+                                    priority = if (obj.isNull("priority")) "MEDIUM" else obj.getString("priority"),
                                     status = obj.optString("status", "OPEN"),
-                                    due_date = if (obj.isNull("due_date")) null else obj.getString("due_date"),
-                                    source_signal_id = if (obj.isNull("source_signal_id")) (if (obj.isNull("source_reference")) null else obj.getString("source_reference")) else obj.getString("source_signal_id"),
+                                    due_date = cleanDueDate,
+                                    source_signal_id = if (obj.isNull("route_id")) null else obj.getString("route_id"),
+                                    source_agent = if (obj.isNull("created_by")) "JARVIS" else obj.getString("created_by"),
+                                    confidence = 1.0,
                                     created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
-                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at"),
+                                    reminder_datetime = if (obj.isNull("reminder_datetime")) null else obj.getString("reminder_datetime")
                                 )
                             )
                         }
@@ -127,6 +143,45 @@ object InsightSyncService {
                         if (list.isNotEmpty()) {
                             db.todoDao().insertAll(list)
                             todoCount = list.size
+                            
+                            // Reconcile and restore exact alarms from reminder_datetime fields
+                            try {
+                                val reminderDao = db.reminderDao()
+                                val now = System.currentTimeMillis()
+                                for (todo in list) {
+                                    val rawRem = todo.reminder_datetime
+                                    val localRem = reminderDao.getById(todo.todo_id)
+                                    if (!rawRem.isNullOrBlank()) {
+                                        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+                                        val targetTime = sdf.parse(rawRem)?.time ?: 0L
+                                        if (targetTime > now) {
+                                            if (localRem == null || localRem.scheduled_timestamp != targetTime) {
+                                                val newRem = com.pradeep.jarviscollector.model.ReminderEntity(
+                                                    reminder_id = todo.todo_id,
+                                                    entity_type = "TODO",
+                                                    title = "Reminder: ${todo.category ?: "Task"}",
+                                                    message = todo.title ?: "Upcoming task deadline",
+                                                    scheduled_timestamp = targetTime,
+                                                    sound_type = "DEFAULT",
+                                                    action_route = "task_detail/${todo.todo_id}",
+                                                    action_payload = "{\"todo_id\":\"${todo.todo_id}\"}"
+                                                )
+                                                JarvisReminderManager.scheduleReminderLocally(context, newRem)
+                                            }
+                                        } else {
+                                            if (localRem != null) {
+                                                JarvisReminderManager.cancelReminderLocally(context, todo.todo_id)
+                                            }
+                                        }
+                                    } else {
+                                        if (localRem != null) {
+                                            JarvisReminderManager.cancelReminderLocally(context, todo.todo_id)
+                                        }
+                                    }
+                                }
+                            } catch (reException: Exception) {
+                                Log.e(TAG, "Failed to reconcile reminders from synced tasks", reException)
+                            }
                         }
                         val complete = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
                         writeDiagnostics(context, "TODOS", startTodos, complete, array.length(), todoCount, "SUCCESS", null)
@@ -140,7 +195,7 @@ object InsightSyncService {
                     writeDiagnostics(context, "TODOS", startTodos, complete, 0, 0, "FAILURE", "Supabase returned null/error payload")
                 }
 
-                // 2. Sync Financial Events
+                // 2. Sync Financial Events (from jarvis_insights_schemav1 with authoritative fields)
                 val startFin = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
                 writeDiagnostics(context, "FINANCIAL_EVENTS", startFin, null, 0, 0, "PENDING", null)
                 if (financialJson != null) {
@@ -151,16 +206,21 @@ object InsightSyncService {
                             val obj = array.getJSONObject(i)
                             list.add(
                                 FinancialEventEntity(
-                                    financial_event_id = obj.optString("id", obj.optString("financial_event_id", "")),
-                                    merchant = if (obj.isNull("title")) (if (obj.isNull("paid_to")) (if (obj.isNull("merchant")) null else obj.getString("merchant")) else obj.getString("paid_to")) else obj.getString("title"),
+                                    financial_event_id = obj.optString("transaction_id", ""),
+                                    merchant = if (obj.isNull("raw_narration")) null else obj.getString("raw_narration"),
+                                    paid_to = if (obj.isNull("merchant")) null else obj.getString("merchant"),
+                                    paid_from = if (obj.isNull("source_account")) null else obj.getString("source_account"),
+                                    transaction_type = if (obj.isNull("direction")) null else obj.getString("direction"),
+                                    payment_channel = if (obj.isNull("transaction_type")) null else obj.getString("transaction_type"),
+                                    transaction_id = if (obj.isNull("reference_number")) null else obj.getString("reference_number"),
                                     amount = if (obj.isNull("amount")) null else obj.getDouble("amount"),
                                     currency = if (obj.isNull("currency")) null else obj.getString("currency"),
                                     category = if (obj.isNull("category")) null else obj.getString("category"),
-                                    status = if (obj.isNull("status")) "PENDING" else obj.getString("status"),
-                                    event_timestamp = if (obj.isNull("event_date")) (if (obj.isNull("event_timestamp")) null else obj.getString("event_timestamp")) else obj.getString("event_date"),
-                                    source_signal_id = if (obj.isNull("source_signal_id")) null else obj.getString("source_signal_id"),
+                                    event_timestamp = if (obj.isNull("event_date")) null else obj.getString("event_date"),
+                                    source_signal_id = if (obj.isNull("signal_route_id")) null else obj.getString("signal_route_id"),
                                     created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
-                                    updated_at = if (obj.isNull("created_at")) null else obj.getString("created_at")
+                                    subcategory = if (obj.isNull("subcategory")) null else obj.getString("subcategory"),
+                                    is_self_transfer = if (obj.isNull("is_self_transfer")) null else obj.getBoolean("is_self_transfer")
                                 )
                             )
                         }
@@ -308,17 +368,20 @@ object InsightSyncService {
                         val list = mutableListOf<FactInsightEntity>()
                         for (i in 0 until array.length()) {
                             val obj = array.getJSONObject(i)
+                            val rawPayloadObj = obj.optJSONObject("raw_payload")
+                            val rawPayloadStr = rawPayloadObj?.toString() ?: obj.optString("raw_payload", "")
+
                             list.add(
                                 FactInsightEntity(
-                                    id = obj.optString("fact_id", obj.optString("id", "")),
-                                    title = obj.optString("fact_type", obj.optString("title", "")),
-                                    summary = obj.optString("fact_value", obj.optString("summary", "")),
-                                    category = obj.optString("category", "General"),
-                                    priority = obj.optString("priority", "MEDIUM"),
+                                    id = obj.getString("id"),
+                                    title = obj.optString("title", "Signal"),
+                                    summary = obj.optString("summary", ""),
+                                    category = obj.optString("category", "GENERAL"),
+                                    priority = obj.optString("importance_level", "EPHEMERAL"),
                                     created_at = obj.optString("created_at", ""),
-                                    read_flag = obj.optBoolean("read_flag", false) || (obj.optString("status", "").uppercase() == "ACKNOWLEDGED"),
-                                    status = obj.optString("status", "NEW"),
-                                    source = obj.optString("source_agent", obj.optString("source", ""))
+                                    read_flag = false, // Locally managed or default unread
+                                    status = obj.optString("processing_path", "RULE_BASED"),
+                                    source = rawPayloadStr
                                 )
                             )
                         }
@@ -441,6 +504,160 @@ object InsightSyncService {
                 } else {
                     val complete = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
                     writeDiagnostics(context, "FINANCIAL", startFinIns, complete, 0, 0, "FAILURE", "Supabase returned null/error payload")
+                }
+
+                // 9. Sync Monthly Spending Summary
+                if (monthlySpendingJson != null) {
+                    try {
+                        val array = JSONArray(monthlySpendingJson)
+                        val list = mutableListOf<com.pradeep.jarviscollector.model.MonthlySpendingSummaryEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                com.pradeep.jarviscollector.model.MonthlySpendingSummaryEntity(
+                                    month_key = obj.optString("month_key", ""),
+                                    total_income = if (obj.isNull("total_income")) null else obj.getDouble("total_income"),
+                                    total_expense = if (obj.isNull("total_expense")) null else obj.getDouble("total_expense"),
+                                    total_transfers = if (obj.isNull("total_transfers")) null else obj.getDouble("total_transfers"),
+                                    net_cashflow = if (obj.isNull("net_cashflow")) null else obj.getDouble("net_cashflow"),
+                                    transaction_count = if (obj.isNull("transaction_count")) null else obj.getInt("transaction_count")
+                                )
+                            )
+                        }
+                        db.monthlySpendingSummaryDao().deleteAll()
+                        if (list.isNotEmpty()) db.monthlySpendingSummaryDao().insertAll(list)
+                        Log.d(TAG, "Synced ${list.size} monthly spending summary rows")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error syncing monthly spending summary", e)
+                    }
+                }
+
+                // 10. Sync Monthly Category Spend
+                if (monthlyCategorySpendJson != null) {
+                    try {
+                        val array = JSONArray(monthlyCategorySpendJson)
+                        val list = mutableListOf<com.pradeep.jarviscollector.model.MonthlyCategorySpendEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                com.pradeep.jarviscollector.model.MonthlyCategorySpendEntity(
+                                    month_key = obj.optString("month_key", ""),
+                                    category = obj.optString("category", "Other"),
+                                    amount = if (obj.isNull("amount")) null else obj.getDouble("amount"),
+                                    transaction_count = if (obj.isNull("transaction_count")) null else obj.getInt("transaction_count")
+                                )
+                            )
+                        }
+                        db.monthlyCategorySpendDao().deleteAll()
+                        if (list.isNotEmpty()) db.monthlyCategorySpendDao().insertAll(list)
+                        Log.d(TAG, "Synced ${list.size} monthly category spend rows")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error syncing monthly category spend", e)
+                    }
+                }
+
+                // 11. Sync Lifecycle Items
+                val startLifecycle = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                writeDiagnostics(context, "LIFECYCLE_ITEMS", startLifecycle, null, 0, 0, "PENDING", null)
+                if (lifecycleJson != null) {
+                    try {
+                        val array = JSONArray(lifecycleJson)
+                        val list = mutableListOf<LifecycleItemEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                LifecycleItemEntity(
+                                    id = obj.getString("id"),
+                                    domain = if (obj.isNull("domain")) null else obj.getString("domain"),
+                                    title = if (obj.isNull("title")) null else obj.getString("title"),
+                                    description = if (obj.isNull("description")) null else obj.getString("description"),
+                                    schedule_type = if (obj.isNull("schedule_type")) null else obj.getString("schedule_type"),
+                                    interval_days = if (obj.isNull("interval_days")) null else obj.getInt("interval_days"),
+                                    next_occurrence_date = if (obj.isNull("next_occurrence_date")) null else obj.getString("next_occurrence_date"),
+                                    reminder_offset_days = if (obj.isNull("reminder_offset_days")) null else obj.getInt("reminder_offset_days"),
+                                    last_promoted_date = if (obj.isNull("last_promoted_date")) null else obj.getString("last_promoted_date"),
+                                    last_todo_id = if (obj.isNull("last_todo_id")) null else obj.getString("last_todo_id"),
+                                    status = if (obj.isNull("status")) null else obj.getString("status"),
+                                    created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
+                                )
+                            )
+                        }
+                        db.lifecycleItemDao().deleteAll()
+                        if (list.isNotEmpty()) {
+                            db.lifecycleItemDao().insertAll(list)
+                        }
+                        val complete = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                        writeDiagnostics(context, "LIFECYCLE_ITEMS", startLifecycle, complete, array.length(), list.size, "SUCCESS", null)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error syncing lifecycle items", e)
+                        val complete = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                        writeDiagnostics(context, "LIFECYCLE_ITEMS", startLifecycle, complete, 0, 0, "FAILURE", e.message ?: e.toString())
+                    }
+                } else {
+                    val complete = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+                    writeDiagnostics(context, "LIFECYCLE_ITEMS", startLifecycle, complete, 0, 0, "FAILURE", "Supabase returned null/error payload")
+                }
+
+                // 12. Sync Vault Categories
+                if (vaultCategoriesJson != null) {
+                    try {
+                        val array = JSONArray(vaultCategoriesJson)
+                        val list = mutableListOf<com.pradeep.jarviscollector.model.VaultCategoryEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                com.pradeep.jarviscollector.model.VaultCategoryEntity(
+                                    vault_category_id = obj.getString("vault_category_id"),
+                                    category_name = obj.getString("category_name"),
+                                    display_order = if (obj.isNull("display_order")) null else obj.getInt("display_order"),
+                                    icon = if (obj.isNull("icon")) null else obj.getString("icon"),
+                                    color = if (obj.isNull("color")) null else obj.getString("color"),
+                                    is_active = if (obj.isNull("is_active")) null else obj.getBoolean("is_active"),
+                                    created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
+                                )
+                            )
+                        }
+                        db.vaultCategoryDao().deleteAll()
+                        if (list.isNotEmpty()) db.vaultCategoryDao().insertAll(list)
+                        Log.d(TAG, "Synced ${list.size} vault category rows")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error syncing vault categories", e)
+                    }
+                }
+
+                // 13. Sync Vault Entries
+                if (vaultEntriesJson != null) {
+                    try {
+                        val array = JSONArray(vaultEntriesJson)
+                        val list = mutableListOf<com.pradeep.jarviscollector.model.VaultEntryEntity>()
+                        for (i in 0 until array.length()) {
+                            val obj = array.getJSONObject(i)
+                            list.add(
+                                com.pradeep.jarviscollector.model.VaultEntryEntity(
+                                    vault_entry_id = obj.getString("vault_entry_id"),
+                                    vault_category_id = obj.getString("vault_category_id"),
+                                    parent_entry_id = if (obj.isNull("parent_entry_id")) null else obj.getString("parent_entry_id"),
+                                    owner = if (obj.isNull("owner")) null else obj.getString("owner"),
+                                    title = obj.getString("title"),
+                                    sub_category = if (obj.isNull("sub_category")) null else obj.getString("sub_category"),
+                                    location = if (obj.isNull("location")) null else obj.getString("location"),
+                                    access_information = if (obj.isNull("access_information")) null else obj.getString("access_information"),
+                                    notes = if (obj.isNull("notes")) null else obj.getString("notes"),
+                                    sort_order = if (obj.isNull("sort_order")) null else obj.getInt("sort_order"),
+                                    is_active = if (obj.isNull("is_active")) null else obj.getBoolean("is_active"),
+                                    created_at = if (obj.isNull("created_at")) null else obj.getString("created_at"),
+                                    updated_at = if (obj.isNull("updated_at")) null else obj.getString("updated_at")
+                                )
+                            )
+                        }
+                        db.vaultEntryDao().deleteAll()
+                        if (list.isNotEmpty()) db.vaultEntryDao().insertAll(list)
+                        Log.d(TAG, "Synced ${list.size} vault entry rows")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error syncing vault entries", e)
+                    }
                 }
             }
 

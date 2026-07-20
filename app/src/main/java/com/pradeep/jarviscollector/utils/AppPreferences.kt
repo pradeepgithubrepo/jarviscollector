@@ -21,9 +21,9 @@ object AppPreferences {
         return prefs
             .getString(
                 KEY_OWNER_NAME,
-                "pradeep"
+                ""
             )
-            ?: "pradeep"
+            ?: ""
     }
 
     fun setOwnerName(
