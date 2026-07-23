@@ -44,7 +44,7 @@ fun VaultEntriesScreen(
     modifier: Modifier = Modifier,
     viewModel: VaultViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
-    val entries by viewModel.getEntriesFlowForCategory(categoryId).collectAsState(initial = emptyList())
+    val entries by viewModel.getEntriesFlowForCategory(categoryId, categoryName).collectAsState(initial = emptyList())
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 

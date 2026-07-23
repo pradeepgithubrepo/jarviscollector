@@ -87,6 +87,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Set native OS window background & status bar colors to dark theme
+        window.statusBarColor = android.graphics.Color.parseColor("#0A0F1E")
+        window.navigationBarColor = android.graphics.Color.parseColor("#0A0F1E")
+
         // Initialize WorkManager background sync schedule
         JarvisSyncWorkerHelper.initialize(applicationContext)
 
@@ -154,7 +158,7 @@ class MainActivity : ComponentActivity() {
             var exportPath by remember { mutableStateOf("") }
             var isSyncing by remember { mutableStateOf(false) }
             var syncResultMessage by remember { mutableStateOf<String?>(null) }
-            var ownerName by remember { mutableStateOf(AppPreferences.getOwnerName(applicationContext)) }
+            var ownerName by remember { mutableStateOf(AppPreferences.getOwnerName(applicationContext).ifBlank { "Pradeep" }) }
             var isSyncingInsights by remember { mutableStateOf(false) }
             var insightSyncResultMessage by remember { mutableStateOf<String?>(null) }
             var isBackfilling by remember { mutableStateOf(false) }
@@ -310,7 +314,7 @@ class MainActivity : ComponentActivity() {
                 Scaffold(
                     bottomBar = {
                         val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-                        val hideBottomBar = currentRoute == Screen.Splash.route || currentRoute == Screen.NameSelection.route
+                        val hideBottomBar = currentRoute == Screen.Splash.route
                         if (!hideBottomBar) {
                             BottomNavigationBar(navController)
                         }
@@ -492,10 +496,15 @@ class MainActivity : ComponentActivity() {
                             lifecycleScope.launch {
                                 val todo = todos.find { it.todo_id == todoId }
                                 if (todo != null) {
-                                    val reminderEntity = ReminderEntity(
+                                     val remTitle = when (todo.priority?.uppercase(Locale.US)) {
+                                         "CRITICAL", "URGENT" -> "⚠️ Urgent Task Alert"
+                                         "HIGH" -> "🔔 High Priority Task"
+                                         else -> "Jarvis Task Reminder"
+                                     }
+                                     val reminderEntity = ReminderEntity(
                                         reminder_id = todoId,
                                         entity_type = "TODO",
-                                        title = "Reminder: ${todo.category ?: "Task"}",
+                                        title = remTitle,
                                         message = todo.title ?: "Upcoming task deadline",
                                         scheduled_timestamp = triggerTime,
                                         sound_type = sound,
@@ -821,7 +830,9 @@ class MainActivity : ComponentActivity() {
                                 onClick = {
                                     if (newTitle.isNotBlank()) {
                                         val generatedId = UUID.randomUUID().toString()
-                                        val timestampSdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+                                        val timestampSdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                                            timeZone = java.util.TimeZone.getTimeZone("UTC")
+                                        }
                                         val nowStr = timestampSdf.format(Date())
                                         
                                         val rawRemIso = newReminderTime?.let { timestampSdf.format(Date(it)) }
@@ -848,10 +859,15 @@ class MainActivity : ComponentActivity() {
                                         lifecycleScope.launch {
                                             val success = TodoRepository.createTodo(applicationContext, todo)
                                             if (success && newReminderTime != null) {
-                                                val reminderEntity = ReminderEntity(
+                                                 val remTitle = when (newPriority.uppercase(Locale.US)) {
+                                                     "CRITICAL", "URGENT" -> "⚠️ Urgent Task Alert"
+                                                     "HIGH" -> "🔔 High Priority Task"
+                                                     else -> "Jarvis Task Reminder"
+                                                 }
+                                                 val reminderEntity = ReminderEntity(
                                                     reminder_id = generatedId,
                                                     entity_type = "TODO",
-                                                    title = "Reminder: General",
+                                                    title = remTitle,
                                                     message = newTitle,
                                                     scheduled_timestamp = newReminderTime!!,
                                                     sound_type = "DEFAULT",

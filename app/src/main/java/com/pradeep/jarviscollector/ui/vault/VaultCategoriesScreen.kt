@@ -156,8 +156,13 @@ fun VaultCategoriesScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             items(uiState.categories) { category ->
+                                val categoryEntries = uiState.entriesMap[category.vault_category_id]
+                                    ?: uiState.entriesMap[category.category_name]
+                                    ?: uiState.entriesMap[category.category_name.lowercase()]
+                                    ?: emptyList()
                                 CategoryCard(
                                     category = category,
+                                    recordCount = categoryEntries.size,
                                     onClick = { onCategoryClick(category.vault_category_id, category.category_name) }
                                 )
                             }
@@ -169,9 +174,28 @@ fun VaultCategoriesScreen(
     }
 }
 
+private fun mapIconStringToEmoji(iconName: String?): String {
+    if (iconName.isNullOrBlank()) return "📁"
+    return when (iconName.lowercase().trim()) {
+        "land-bank", "bank" -> "🏦"
+        "chart-trending-up", "trending-up" -> "📈"
+        "vault", "lock" -> "💼"
+        "shield-check", "insurance" -> "🛡️"
+        "home", "physical-assets" -> "🏠"
+        "chart-bar", "investments" -> "📊"
+        "building", "properties" -> "🏢"
+        "car", "vehicles" -> "🚗"
+        "file-text", "documents" -> "📄"
+        "key", "digital-accounts" -> "🔑"
+        "folder", "other" -> "📁"
+        else -> if (iconName.length <= 4) iconName else "📁"
+    }
+}
+
 @Composable
 private fun CategoryCard(
     category: VaultCategoryEntity,
+    recordCount: Int,
     onClick: () -> Unit
 ) {
     val hexColor = try {
@@ -208,9 +232,25 @@ private fun CategoryCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = category.icon ?: "📁",
+                        text = mapIconStringToEmoji(category.icon),
                         fontSize = 20.sp
                     )
+                }
+
+                if (recordCount > 0) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(AccentViolet.copy(alpha = 0.2f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "$recordCount",
+                            color = AccentViolet,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
 
@@ -223,9 +263,10 @@ private fun CategoryCard(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "Tap to view records",
-                    color = TextSecondary,
-                    fontSize = 11.sp
+                    text = if (recordCount == 1) "1 record" else "$recordCount records",
+                    color = if (recordCount > 0) TextPrimary.copy(alpha = 0.9f) else TextSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = if (recordCount > 0) FontWeight.SemiBold else FontWeight.Normal
                 )
             }
         }

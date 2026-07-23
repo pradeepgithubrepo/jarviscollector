@@ -43,10 +43,21 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 // 1. Seed defaults if DB is empty
                 VaultRepository.seedDefaultCategoriesIfEmpty(getApplication())
 
-                // 2. Observe categories flow
-                categoryDao.getAllFlow().collect { categoriesList ->
+                // 2. Observe categories and entries flow together
+                combine(categoryDao.getAllFlow(), entryDao.getAllFlow()) { categoriesList, entriesList ->
+                    val map = mutableMapOf<String, MutableList<VaultEntryEntity>>()
+                    entriesList.forEach { entry ->
+                        val catId = entry.vault_category_id
+                        map.getOrPut(catId) { mutableListOf() }.add(entry)
+                        if (!map.containsKey(catId.lowercase())) {
+                            map.getOrPut(catId.lowercase()) { mutableListOf() }.add(entry)
+                        }
+                    }
+                    Pair(categoriesList, map)
+                }.collect { (categoriesList, map) ->
                     _uiState.value = _uiState.value.copy(
                         categories = categoriesList,
+                        entriesMap = map,
                         isLoading = false,
                         isError = false
                     )
@@ -58,8 +69,8 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun getEntriesFlowForCategory(categoryId: String): Flow<List<VaultEntryEntity>> {
-        return entryDao.getForCategoryFlow(categoryId)
+    fun getEntriesFlowForCategory(categoryId: String, categoryName: String = ""): Flow<List<VaultEntryEntity>> {
+        return entryDao.getForCategoryFlow(categoryId, categoryName)
     }
 
     fun syncVaultData() {

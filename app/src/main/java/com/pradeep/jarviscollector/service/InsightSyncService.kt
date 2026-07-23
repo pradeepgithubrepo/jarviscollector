@@ -71,6 +71,44 @@ object InsightSyncService {
         }
     }
 
+    private fun parseIsoTimestamp(rawDate: String): Long {
+        if (rawDate.isBlank()) return 0L
+        try {
+            var normalized = rawDate.trim().replace(" ", "T")
+            if (normalized.matches(Regex(".+[-+]\\d{2}"))) {
+                normalized += ":00"
+            }
+            if (normalized.matches(Regex(".+[-+]\\d{4}"))) {
+                val base = normalized.substring(0, normalized.length - 2)
+                val suffix = normalized.substring(normalized.length - 2)
+                normalized = "$base:$suffix"
+            }
+            return java.time.OffsetDateTime.parse(normalized).toInstant().toEpochMilli()
+        } catch (e: Exception) {
+            Log.e(TAG, "OffsetDateTime parsing failed for: $rawDate", e)
+        }
+
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd HH:mm:ss"
+        )
+        for (fmt in formats) {
+            try {
+                val sdf = SimpleDateFormat(fmt, Locale.US).apply {
+                    timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
+                val date = sdf.parse(rawDate)
+                if (date != null) return date.time
+            } catch (e: Exception) {
+                // continue
+            }
+        }
+        return 0L
+    }
+
     suspend fun syncInsights(
         context: Context
     ): InsightSyncResult = withContext(Dispatchers.IO) {
@@ -91,7 +129,9 @@ object InsightSyncService {
             val monthlyCategorySpendJson = JarvisInsightsClient.fetchTable("monthly_category_spend", "jarvis_insights_schemav1")
             val lifecycleJson = JarvisInsightsClient.fetchTable("lifecycle_items", "jarvis_insights_schemav1")
             val vaultCategoriesJson = JarvisInsightsClient.fetchTable("vault_categories", "jarvis_insights_schemav1")
+                ?: JarvisInsightsClient.fetchTable("vault_categories", "jarvis_insights_schema")
             val vaultEntriesJson = JarvisInsightsClient.fetchTable("vault_entries", "jarvis_insights_schemav1")
+                ?: JarvisInsightsClient.fetchTable("vault_entries", "jarvis_insights_schema")
 
 
             val db = JarvisDatabase.getDatabase(context)
@@ -152,22 +192,24 @@ object InsightSyncService {
                                     val rawRem = todo.reminder_datetime
                                     val localRem = reminderDao.getById(todo.todo_id)
                                     if (!rawRem.isNullOrBlank()) {
-                                        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
-                                        val targetTime = sdf.parse(rawRem)?.time ?: 0L
+                                        val targetTime = parseIsoTimestamp(rawRem)
                                         if (targetTime > now) {
-                                            if (localRem == null || localRem.scheduled_timestamp != targetTime) {
-                                                val newRem = com.pradeep.jarviscollector.model.ReminderEntity(
-                                                    reminder_id = todo.todo_id,
-                                                    entity_type = "TODO",
-                                                    title = "Reminder: ${todo.category ?: "Task"}",
-                                                    message = todo.title ?: "Upcoming task deadline",
-                                                    scheduled_timestamp = targetTime,
-                                                    sound_type = "DEFAULT",
-                                                    action_route = "task_detail/${todo.todo_id}",
-                                                    action_payload = "{\"todo_id\":\"${todo.todo_id}\"}"
-                                                )
-                                                JarvisReminderManager.scheduleReminderLocally(context, newRem)
+                                            val remTitle = when (todo.priority?.uppercase(Locale.US)) {
+                                                "CRITICAL", "URGENT" -> "⚠️ Urgent Task Alert"
+                                                "HIGH" -> "🔔 High Priority Task"
+                                                else -> "Jarvis Task Reminder"
                                             }
+                                            val newRem = com.pradeep.jarviscollector.model.ReminderEntity(
+                                                reminder_id = todo.todo_id,
+                                                entity_type = "TODO",
+                                                title = remTitle,
+                                                message = todo.title ?: "Upcoming task deadline",
+                                                scheduled_timestamp = targetTime,
+                                                sound_type = "DEFAULT",
+                                                action_route = "task_detail/${todo.todo_id}",
+                                                action_payload = "{\"todo_id\":\"${todo.todo_id}\"}"
+                                            )
+                                            JarvisReminderManager.scheduleReminderLocally(context, newRem)
                                         } else {
                                             if (localRem != null) {
                                                 JarvisReminderManager.cancelReminderLocally(context, todo.todo_id)
@@ -619,13 +661,16 @@ object InsightSyncService {
                                 )
                             )
                         }
-                        db.vaultCategoryDao().deleteAll()
-                        if (list.isNotEmpty()) db.vaultCategoryDao().insertAll(list)
+                        if (list.isNotEmpty()) {
+                            db.vaultCategoryDao().deleteAll()
+                            db.vaultCategoryDao().insertAll(list)
+                        }
                         Log.d(TAG, "Synced ${list.size} vault category rows")
                     } catch (e: Exception) {
                         Log.e(TAG, "Error syncing vault categories", e)
                     }
                 }
+                com.pradeep.jarviscollector.repository.VaultRepository.seedDefaultCategoriesIfEmpty(context)
 
                 // 13. Sync Vault Entries
                 if (vaultEntriesJson != null) {

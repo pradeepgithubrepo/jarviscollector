@@ -42,6 +42,5 @@ sealed class Screen(val route: String, val title: String? = null, val icon: Imag
         fun createRoute(categoryId: String, categoryName: String) = "vault/entries/$categoryId/$categoryName"
     }
     // Transient routes — no icon needed (never appear in bottom nav)
-    object NameSelection : Screen("name_selection", "Select User")
     object Splash : Screen("splash", "Splash")
 }

@@ -366,11 +366,23 @@ interface VaultEntryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entry: VaultEntryEntity)
 
-    @Query("SELECT * FROM vault_entries WHERE vault_category_id = :categoryId ORDER BY sort_order ASC, title ASC")
-    suspend fun getForCategory(categoryId: String): List<VaultEntryEntity>
+    @Query("SELECT * FROM vault_entries WHERE vault_category_id = :categoryId OR vault_category_id = :categoryName OR LOWER(vault_category_id) = LOWER(:categoryName) ORDER BY sort_order ASC, title ASC")
+    suspend fun getForCategory(categoryId: String, categoryName: String): List<VaultEntryEntity>
+
+    @Query("SELECT * FROM vault_entries WHERE vault_category_id = :categoryId OR vault_category_id = :categoryName OR LOWER(vault_category_id) = LOWER(:categoryName) ORDER BY sort_order ASC, title ASC")
+    fun getForCategoryFlow(categoryId: String, categoryName: String): Flow<List<VaultEntryEntity>>
 
     @Query("SELECT * FROM vault_entries WHERE vault_category_id = :categoryId ORDER BY sort_order ASC, title ASC")
-    fun getForCategoryFlow(categoryId: String): Flow<List<VaultEntryEntity>>
+    suspend fun getForCategoryId(categoryId: String): List<VaultEntryEntity>
+
+    @Query("SELECT * FROM vault_entries WHERE vault_category_id = :categoryId ORDER BY sort_order ASC, title ASC")
+    fun getForCategoryIdFlow(categoryId: String): Flow<List<VaultEntryEntity>>
+
+    @Query("SELECT * FROM vault_entries ORDER BY sort_order ASC, title ASC")
+    suspend fun getAll(): List<VaultEntryEntity>
+
+    @Query("SELECT * FROM vault_entries ORDER BY sort_order ASC, title ASC")
+    fun getAllFlow(): Flow<List<VaultEntryEntity>>
 
     @Query("DELETE FROM vault_entries WHERE vault_entry_id = :id")
     suspend fun deleteById(id: String)

@@ -28,7 +28,9 @@ object TodoRepository {
     }
 
     suspend fun createTodo(context: Context, todo: TodoEntity): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         val timestamp = sdf.format(Date())
 
         val payload = JSONObject().apply {
@@ -161,6 +163,18 @@ object TodoRepository {
         success
     }
 
+    suspend fun clearCompletedTodos(context: Context): Boolean = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        val completed = getDao(context).getCompleted()
+        var allSuccess = true
+        for (todo in completed) {
+            val success = deleteTodo(context, todo.todo_id)
+            if (!success) {
+                allSuccess = false
+            }
+        }
+        allSuccess
+    }
+
     // --- REMINDER MANAGEMENT METHODS ---
 
     suspend fun getReminder(context: Context, todoId: String): ReminderEntity? = kotlinx.coroutines.withContext(Dispatchers.IO) {
@@ -176,7 +190,9 @@ object TodoRepository {
         getReminderDao(context).insert(reminder)
 
         // 2. Sync to Supabase
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }
         val isoTimestamp = sdf.format(Date(reminder.scheduled_timestamp))
         val payload = JSONObject().apply {
             put("reminder_datetime", isoTimestamp)

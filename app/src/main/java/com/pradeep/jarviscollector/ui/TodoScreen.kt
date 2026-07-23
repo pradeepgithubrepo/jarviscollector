@@ -41,6 +41,7 @@ fun TodoScreen(
     onSetReminder: (String, Long, Int, String) -> Unit,
     onRemoveReminder: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onClearCompleted: () -> Unit,
     onAddTodoClick: () -> Unit,
     onVoiceTodoClick: () -> Unit,
     onNavigateToTaskDetail: (String) -> Unit,
@@ -56,17 +57,47 @@ fun TodoScreen(
 
     // Load active tasks
     val filteredList = remember(todos, activeFilter) {
-        val list = todos.filter { it.status.uppercase(Locale.US) != "DISMISSED" }
+        val list = todos.filter { it.status.uppercase(Locale.US) != "DISMISSED" && it.status.uppercase(Locale.US) != "COMPLETED" }
         when (activeFilter) {
             TodoFilter.ALL -> list
             TodoFilter.TODAY -> list.filter {
-                it.due_date == todayStr && it.status.uppercase(Locale.US) != "COMPLETED"
+                it.due_date == todayStr
             }
             TodoFilter.OVERDUE -> list.filter {
                 val due = it.due_date
-                due != null && due < todayStr && it.status.uppercase(Locale.US) != "COMPLETED"
+                due != null && due < todayStr
             }
-            TodoFilter.COMPLETED -> list.filter { it.status.uppercase(Locale.US) == "COMPLETED" }
+            TodoFilter.COMPLETED -> todos.filter { it.status.uppercase(Locale.US) == "COMPLETED" && it.status.uppercase(Locale.US) != "DISMISSED" }
+        }
+    }
+
+    val priorityWeights = remember {
+        mapOf("CRITICAL" to 4, "URGENT" to 4, "HIGH" to 3, "MEDIUM" to 2, "LOW" to 1)
+    }
+
+    fun sortTasks(tasks: List<TodoEntity>): List<TodoEntity> {
+        return tasks.sortedWith(
+            compareByDescending<TodoEntity> { priorityWeights[it.priority?.uppercase(Locale.US)] ?: 0 }
+                .thenBy { it.due_date ?: "9999-12-31" }
+        )
+    }
+
+    // Partition tasks
+    val userAddedTasks = remember(filteredList, activeFilter) {
+        if (activeFilter == TodoFilter.COMPLETED) emptyList()
+        else sortTasks(filteredList.filter { it.source_agent?.uppercase(Locale.US) == "USER" })
+    }
+
+    val systemAddedTasks = remember(filteredList, activeFilter) {
+        if (activeFilter == TodoFilter.COMPLETED) emptyList()
+        else sortTasks(filteredList.filter { it.source_agent?.uppercase(Locale.US) != "USER" })
+    }
+
+    val completedTasksSorted = remember(filteredList, activeFilter) {
+        if (activeFilter == TodoFilter.COMPLETED) {
+            sortTasks(filteredList)
+        } else {
+            emptyList()
         }
     }
 
@@ -175,10 +206,10 @@ fun TodoScreen(
                         TodoFilter.COMPLETED -> "Completed"
                     }
                     val count = when (filter) {
-                        TodoFilter.ALL -> todos.count { it.status.uppercase(Locale.US) != "DISMISSED" }
-                        TodoFilter.TODAY -> todos.count { it.due_date == todayStr && it.status.uppercase(Locale.US) != "COMPLETED" }
-                        TodoFilter.OVERDUE -> todos.count { val due = it.due_date; due != null && due < todayStr && it.status.uppercase(Locale.US) != "COMPLETED" }
-                        TodoFilter.COMPLETED -> todos.count { it.status.uppercase(Locale.US) == "COMPLETED" }
+                        TodoFilter.ALL -> todos.count { it.status.uppercase(Locale.US) != "DISMISSED" && it.status.uppercase(Locale.US) != "COMPLETED" }
+                        TodoFilter.TODAY -> todos.count { it.due_date == todayStr && it.status.uppercase(Locale.US) != "COMPLETED" && it.status.uppercase(Locale.US) != "DISMISSED" }
+                        TodoFilter.OVERDUE -> todos.count { val due = it.due_date; due != null && due < todayStr && it.status.uppercase(Locale.US) != "COMPLETED" && it.status.uppercase(Locale.US) != "DISMISSED" }
+                        TodoFilter.COMPLETED -> todos.count { it.status.uppercase(Locale.US) == "COMPLETED" && it.status.uppercase(Locale.US) != "DISMISSED" }
                     }
 
                     FilterChip(
@@ -224,17 +255,86 @@ fun TodoScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(filteredList, key = { it.todo_id }) { todo ->
-                        val taskReminder = reminders.find { it.reminder_id == todo.todo_id }
-                        TodoV2Card(
-                            todo = todo,
-                            reminder = taskReminder,
-                            onClick = { onNavigateToTaskDetail(todo.todo_id) },
-                            onComplete = { onComplete(todo.todo_id) },
-                            onSnooze = { showSnoozeDialogForId = todo.todo_id },
-                            onReminder = { triggerReminderPickers(todo.todo_id) },
-                            onDelete = { onDelete(todo.todo_id) }
-                        )
+                    if (activeFilter == TodoFilter.COMPLETED) {
+                        item {
+                            Button(
+                                onClick = onClearCompleted,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 8.dp)
+                            ) {
+                                Text("🗑️ Clear All Completed Tasks", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
+                        }
+
+                        items(completedTasksSorted, key = { it.todo_id }) { todo ->
+                            val taskReminder = reminders.find { it.reminder_id == todo.todo_id }
+                            TodoV2Card(
+                                todo = todo,
+                                reminder = taskReminder,
+                                onClick = { onNavigateToTaskDetail(todo.todo_id) },
+                                onComplete = { onComplete(todo.todo_id) },
+                                onSnooze = { showSnoozeDialogForId = todo.todo_id },
+                                onReminder = { triggerReminderPickers(todo.todo_id) },
+                                onDelete = { onDelete(todo.todo_id) }
+                            )
+                        }
+                    } else {
+                        // User manual added tasks (separate section at top)
+                        if (userAddedTasks.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "📍 PERSONAL TASKS (USER ADDED)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF6366F1),
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
+
+                            items(userAddedTasks, key = { it.todo_id }) { todo ->
+                                val taskReminder = reminders.find { it.reminder_id == todo.todo_id }
+                                TodoV2Card(
+                                    todo = todo,
+                                    reminder = taskReminder,
+                                    onClick = { onNavigateToTaskDetail(todo.todo_id) },
+                                    onComplete = { onComplete(todo.todo_id) },
+                                    onSnooze = { showSnoozeDialogForId = todo.todo_id },
+                                    onReminder = { triggerReminderPickers(todo.todo_id) },
+                                    onDelete = { onDelete(todo.todo_id) }
+                                )
+                            }
+                        }
+
+                        // Agent/Signal added tasks
+                        if (systemAddedTasks.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "⚡ AGENT / SIGNAL TASKS",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF10B981),
+                                    letterSpacing = 1.sp,
+                                    modifier = Modifier.padding(top = 10.dp, bottom = 4.dp)
+                                )
+                            }
+
+                            items(systemAddedTasks, key = { it.todo_id }) { todo ->
+                                val taskReminder = reminders.find { it.reminder_id == todo.todo_id }
+                                TodoV2Card(
+                                    todo = todo,
+                                    reminder = taskReminder,
+                                    onClick = { onNavigateToTaskDetail(todo.todo_id) },
+                                    onComplete = { onComplete(todo.todo_id) },
+                                    onSnooze = { showSnoozeDialogForId = todo.todo_id },
+                                    onReminder = { triggerReminderPickers(todo.todo_id) },
+                                    onDelete = { onDelete(todo.todo_id) }
+                                )
+                            }
+                        }
                     }
                 }
             }

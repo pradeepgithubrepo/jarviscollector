@@ -16,14 +16,27 @@ object VaultRepository {
 
     private const val TAG = "VaultRepository"
     private const val SCHEMA = "jarvis_insights_schemav1"
+    private const val FALLBACK_SCHEMA = "jarvis_insights_schema"
+
+    data class DefaultCategorySpec(
+        val id: String,
+        val name: String,
+        val icon: String,
+        val color: String
+    )
 
     val DEFAULT_CATEGORIES = listOf(
-        Triple("Bank Accounts", "🏦", "#3B82F6"),
-        Triple("Investments", "📈", "#10B981"),
-        Triple("Insurance", "🛡", "#8B5CF6"),
-        Triple("Properties", "🏠", "#F59E0B"),
-        Triple("Vehicles", "🚗", "#EC4899"),
-        Triple("Other", "📄", "#64748B")
+        DefaultCategorySpec("9af8c8d9-b76e-47d2-94ac-7aeab86efad5", "Bank Accounts", "land-bank", "#2563EB"),
+        DefaultCategorySpec("f367e307-f8cb-45c2-91e6-b1d39213c648", "Stocks & Mutual Funds", "chart-trending-up", "#059669"),
+        DefaultCategorySpec("f38e18ff-3237-4436-8f21-1da0ed8f9ecf", "Long Term Investments", "vault", "#10B981"),
+        DefaultCategorySpec("c6aaf398-0046-4172-b6ca-e5548bc51961", "Insurance", "shield-check", "#D97706"),
+        DefaultCategorySpec("314648b5-3b1a-43fb-adf7-eb5062416db4", "Physical Assets", "home", "#7C3AED"),
+        DefaultCategorySpec("bae73f29-fd66-4493-a9a0-799f8330e091", "Investments", "chart-bar", "#059669"),
+        DefaultCategorySpec("14854c45-4216-4fdd-8366-0c34d17d6c9f", "Properties", "building", "#7C3AED"),
+        DefaultCategorySpec("2d2ee013-a7c2-4940-a9f0-2e25ee2239ae", "Vehicles", "car", "#DC2626"),
+        DefaultCategorySpec("b6656e92-7d21-45d0-995f-4939b78e7401", "Documents", "file-text", "#4B5563"),
+        DefaultCategorySpec("011287a6-4433-40da-8091-cd0ddd6b5618", "Digital Accounts", "key", "#0891B2"),
+        DefaultCategorySpec("dd3e2c15-8847-4985-9bcf-d904f065b3a5", "Other", "folder", "#6B7280")
     )
 
     suspend fun seedDefaultCategoriesIfEmpty(context: Context) = withContext(Dispatchers.IO) {
@@ -32,38 +45,39 @@ object VaultRepository {
             val dao = db.vaultCategoryDao()
             val existing = dao.getAll()
             if (existing.isEmpty()) {
-                Log.d(TAG, "No vault categories found. Seeding defaults to Supabase...")
+                Log.d(TAG, "No vault categories found. Seeding defaults...")
                 val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).format(Date())
                 val entities = mutableListOf<VaultCategoryEntity>()
 
-                DEFAULT_CATEGORIES.forEachIndexed { index, (name, icon, color) ->
-                    val id = UUID.randomUUID().toString()
+                DEFAULT_CATEGORIES.forEachIndexed { index, spec ->
                     val payload = JSONObject().apply {
-                        put("vault_category_id", id)
-                        put("category_name", name)
+                        put("vault_category_id", spec.id)
+                        put("category_name", spec.name)
                         put("display_order", index + 1)
-                        put("icon", icon)
-                        put("color", color)
+                        put("icon", spec.icon)
+                        put("color", spec.color)
                         put("is_active", true)
                         put("created_at", now)
                         put("updated_at", now)
                     }
 
-                    val success = JarvisInsightsClient.insertRow("vault_categories", payload.toString(), SCHEMA)
-                    if (success) {
-                        entities.add(
-                            VaultCategoryEntity(
-                                vault_category_id = id,
-                                category_name = name,
-                                display_order = index + 1,
-                                icon = icon,
-                                color = color,
-                                is_active = true,
-                                created_at = now,
-                                updated_at = now
-                            )
-                        )
+                    var success = JarvisInsightsClient.insertRow("vault_categories", payload.toString(), SCHEMA)
+                    if (!success) {
+                        success = JarvisInsightsClient.insertRow("vault_categories", payload.toString(), FALLBACK_SCHEMA)
                     }
+
+                    entities.add(
+                        VaultCategoryEntity(
+                            vault_category_id = spec.id,
+                            category_name = spec.name,
+                            display_order = index + 1,
+                            icon = spec.icon,
+                            color = spec.color,
+                            is_active = true,
+                            created_at = now,
+                            updated_at = now
+                        )
+                    )
                 }
 
                 if (entities.isNotEmpty()) {
@@ -104,38 +118,42 @@ object VaultRepository {
                 put("updated_at", now)
             }
 
-            val success = JarvisInsightsClient.insertRow("vault_entries", payload.toString(), SCHEMA)
-            if (success) {
-                val db = JarvisDatabase.getDatabase(context)
-                val entity = VaultEntryEntity(
-                    vault_entry_id = entryId,
-                    vault_category_id = categoryId,
-                    parent_entry_id = null,
-                    owner = owner?.trim(),
-                    title = title.trim(),
-                    sub_category = subCategory?.trim(),
-                    location = location?.trim(),
-                    access_information = accessInformation?.trim(),
-                    notes = notes?.trim(),
-                    sort_order = 0,
-                    is_active = true,
-                    created_at = now,
-                    updated_at = now
-                )
-                db.vaultEntryDao().insert(entity)
-
-                try {
-                    ActionsRepository.logAction(
-                        context = context,
-                        entityType = "VAULT_ENTRY",
-                        entityId = entryId,
-                        action = "vault_entry_create"
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Non-critical error logging action", e)
-                }
+            var success = JarvisInsightsClient.insertRow("vault_entries", payload.toString(), SCHEMA)
+            if (!success) {
+                success = JarvisInsightsClient.insertRow("vault_entries", payload.toString(), FALLBACK_SCHEMA)
             }
-            success
+
+            // Always save locally to Room for immediate UX responsiveness
+            val db = JarvisDatabase.getDatabase(context)
+            val entity = VaultEntryEntity(
+                vault_entry_id = entryId,
+                vault_category_id = categoryId,
+                parent_entry_id = null,
+                owner = owner?.trim(),
+                title = title.trim(),
+                sub_category = subCategory?.trim(),
+                location = location?.trim(),
+                access_information = accessInformation?.trim(),
+                notes = notes?.trim(),
+                sort_order = 0,
+                is_active = true,
+                created_at = now,
+                updated_at = now
+            )
+            db.vaultEntryDao().insert(entity)
+
+            try {
+                ActionsRepository.logAction(
+                    context = context,
+                    entityType = "VAULT_ENTRY",
+                    entityId = entryId,
+                    action = "vault_entry_create"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Non-critical error logging action", e)
+            }
+
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create vault entry", e)
             false
@@ -168,38 +186,41 @@ object VaultRepository {
             }
 
             val queryParams = "vault_entry_id=eq.$entryId"
-            val success = JarvisInsightsClient.updateRow("vault_entries", queryParams, payload.toString(), SCHEMA)
-            if (success) {
-                val db = JarvisDatabase.getDatabase(context)
-                val entity = VaultEntryEntity(
-                    vault_entry_id = entryId,
-                    vault_category_id = categoryId,
-                    parent_entry_id = null,
-                    owner = owner?.trim(),
-                    title = title.trim(),
-                    sub_category = subCategory?.trim(),
-                    location = location?.trim(),
-                    access_information = accessInformation?.trim(),
-                    notes = notes?.trim(),
-                    sort_order = 0,
-                    is_active = true,
-                    created_at = now,
-                    updated_at = now
-                )
-                db.vaultEntryDao().insert(entity)
-
-                try {
-                    ActionsRepository.logAction(
-                        context = context,
-                        entityType = "VAULT_ENTRY",
-                        entityId = entryId,
-                        action = "vault_entry_update"
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Non-critical error logging action", e)
-                }
+            var success = JarvisInsightsClient.updateRow("vault_entries", queryParams, payload.toString(), SCHEMA)
+            if (!success) {
+                success = JarvisInsightsClient.updateRow("vault_entries", queryParams, payload.toString(), FALLBACK_SCHEMA)
             }
-            success
+
+            val db = JarvisDatabase.getDatabase(context)
+            val entity = VaultEntryEntity(
+                vault_entry_id = entryId,
+                vault_category_id = categoryId,
+                parent_entry_id = null,
+                owner = owner?.trim(),
+                title = title.trim(),
+                sub_category = subCategory?.trim(),
+                location = location?.trim(),
+                access_information = accessInformation?.trim(),
+                notes = notes?.trim(),
+                sort_order = 0,
+                is_active = true,
+                created_at = now,
+                updated_at = now
+            )
+            db.vaultEntryDao().insert(entity)
+
+            try {
+                ActionsRepository.logAction(
+                    context = context,
+                    entityType = "VAULT_ENTRY",
+                    entityId = entryId,
+                    action = "vault_entry_update"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Non-critical error logging action", e)
+            }
+
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to update vault entry", e)
             false
@@ -209,23 +230,26 @@ object VaultRepository {
     suspend fun deleteVaultEntry(context: Context, entryId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val queryParams = "vault_entry_id=eq.$entryId"
-            val success = JarvisInsightsClient.deleteRow("vault_entries", queryParams, SCHEMA)
-            if (success) {
-                val db = JarvisDatabase.getDatabase(context)
-                db.vaultEntryDao().deleteById(entryId)
-
-                try {
-                    ActionsRepository.logAction(
-                        context = context,
-                        entityType = "VAULT_ENTRY",
-                        entityId = entryId,
-                        action = "vault_entry_delete"
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Non-critical error logging action", e)
-                }
+            var success = JarvisInsightsClient.deleteRow("vault_entries", queryParams, SCHEMA)
+            if (!success) {
+                success = JarvisInsightsClient.deleteRow("vault_entries", queryParams, FALLBACK_SCHEMA)
             }
-            success
+
+            val db = JarvisDatabase.getDatabase(context)
+            db.vaultEntryDao().deleteById(entryId)
+
+            try {
+                ActionsRepository.logAction(
+                    context = context,
+                    entityType = "VAULT_ENTRY",
+                    entityId = entryId,
+                    action = "vault_entry_delete"
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Non-critical error logging action", e)
+            }
+
+            true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete vault entry", e)
             false

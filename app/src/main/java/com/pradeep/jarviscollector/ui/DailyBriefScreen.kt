@@ -25,10 +25,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.pradeep.jarviscollector.ui.brief.BriefPayloadSection
-import com.pradeep.jarviscollector.ui.brief.BriefSectionItem
-import com.pradeep.jarviscollector.ui.brief.DailyBriefUiState
-import com.pradeep.jarviscollector.ui.brief.DailyBriefViewModel
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.BorderStroke
+import com.pradeep.jarviscollector.ui.brief.*
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -152,54 +151,62 @@ private fun BriefTopBar(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun BriefContent(uiState: DailyBriefUiState) {
+    val richBrief = uiState.richBrief
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // ── Summary Metrics Row ──────────────────────────────────────────────
-        if (uiState.todoCount > 0 || uiState.fyiCount > 0 || uiState.factCount > 0) {
+        if (richBrief != null) {
+            // ── Greeting Header ──────────────────────────────────────────────
             item {
-                BriefMetricsRow(
-                    todoCount  = uiState.todoCount,
-                    fyiCount   = uiState.fyiCount,
-                    factCount  = uiState.factCount
+                BriefGreetingHeaderCard(
+                    title = richBrief.title,
+                    briefType = uiState.briefType,
+                    generatedAt = uiState.generatedAt
                 )
             }
-        }
 
-        // ── Divider ──────────────────────────────────────────────────────────
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Divider(modifier = Modifier.weight(1f), color = BriefDivider, thickness = 1.dp)
-                Text(
-                    text = "  BRIEF  ",
-                    color = BriefTextSecondary,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Divider(modifier = Modifier.weight(1f), color = BriefDivider, thickness = 1.dp)
+            // ── Day Status Banner ────────────────────────────────────────────
+            if (richBrief.dayStatus != null) {
+                item {
+                    BriefDayStatusCard(dayStatus = richBrief.dayStatus)
+                }
             }
-        }
 
-        // ── Content Sections ─────────────────────────────────────────────────
-        itemsIndexed(uiState.sections) { _, item ->
-            BriefContentCard(item = item)
-        }
+            // ── Rich Sections ────────────────────────────────────────────────
+            items(richBrief.sections) { section ->
+                RichBriefSectionCard(section = section)
+            }
 
-        // ── Payload Sections ─────────────────────────────────────────────────
-        if (uiState.payloadSections.isNotEmpty()) {
+            // ── Closing Message ──────────────────────────────────────────────
+            if (!richBrief.closingMessage.isNullOrBlank()) {
+                item {
+                    BriefClosingCard(message = richBrief.closingMessage)
+                }
+            }
+        } else {
+            // ── Legacy Summary Metrics Row ──────────────────────────────────
+            if (uiState.todoCount > 0 || uiState.fyiCount > 0 || uiState.factCount > 0) {
+                item {
+                    BriefMetricsRow(
+                        todoCount  = uiState.todoCount,
+                        fyiCount   = uiState.fyiCount,
+                        factCount  = uiState.factCount
+                    )
+                }
+            }
+
+            // ── Divider ──────────────────────────────────────────────────────
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Divider(modifier = Modifier.weight(1f), color = BriefDivider, thickness = 1.dp)
                     Text(
-                        text = "  DETAILS  ",
+                        text = "  BRIEF  ",
                         color = BriefTextSecondary,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold
@@ -207,12 +214,276 @@ private fun BriefContent(uiState: DailyBriefUiState) {
                     Divider(modifier = Modifier.weight(1f), color = BriefDivider, thickness = 1.dp)
                 }
             }
-            itemsIndexed(uiState.payloadSections) { _, section ->
-                BriefPayloadSectionCard(section = section)
+
+            // ── Content Sections ─────────────────────────────────────────────
+            itemsIndexed(uiState.sections) { _, item ->
+                BriefContentCard(item = item)
+            }
+
+            // ── Payload Sections ─────────────────────────────────────────────
+            if (uiState.payloadSections.isNotEmpty()) {
+                item {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                    ) {
+                        Divider(modifier = Modifier.weight(1f), color = BriefDivider, thickness = 1.dp)
+                        Text(
+                            text = "  DETAILS  ",
+                            color = BriefTextSecondary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Divider(modifier = Modifier.weight(1f), color = BriefDivider, thickness = 1.dp)
+                    }
+                }
+                itemsIndexed(uiState.payloadSections) { _, section ->
+                    BriefPayloadSectionCard(section = section)
+                }
             }
         }
 
         item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun BriefGreetingHeaderCard(
+    title: String,
+    briefType: String,
+    generatedAt: String
+) {
+    val isMorning = briefType.uppercase() != "EVENING"
+    val gradientColors = if (isMorning) {
+        listOf(Color(0xFF3B82F6), Color(0xFF8B5CF6)) // Blue to Purple
+    } else {
+        listOf(Color(0xFF6366F1), Color(0xFFEC4899)) // Indigo to Pink
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = BriefSurface
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(brush = Brush.horizontalGradient(gradientColors), alpha = 0.15f)
+                .border(1.dp, brush = Brush.horizontalGradient(gradientColors.map { it.copy(alpha = 0.3f) }), shape = RoundedCornerShape(16.dp))
+                .padding(20.dp)
+        ) {
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = title,
+                        color = BriefTextPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = if (isMorning) "☀️" else "🌙",
+                        fontSize = 28.sp
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val badgeColor = if (isMorning) BriefGold else BriefPurple
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = badgeColor.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = briefType.uppercase(),
+                            color = badgeColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                    if (generatedAt.isNotBlank()) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Generated ${formatGeneratedAt(generatedAt)}",
+                            color = BriefTextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BriefDayStatusCard(dayStatus: RichDayStatus) {
+    val statusColor = when (dayStatus.color.lowercase(Locale.US)) {
+        "red" -> Color(0xFFEF4444)
+        "yellow", "orange" -> Color(0xFFF59E0B)
+        "green" -> Color(0xFF10B981)
+        else -> BriefAccent
+    }
+    val emoji = when (dayStatus.color.lowercase(Locale.US)) {
+        "red" -> "🚨"
+        "yellow", "orange" -> "⚠️"
+        "green" -> "✅"
+        else -> "ℹ️"
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = BriefSurface,
+        border = BorderStroke(1.dp, statusColor.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(statusColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = emoji, fontSize = 18.sp)
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = dayStatus.status,
+                    color = statusColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                )
+                if (dayStatus.reason.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = dayStatus.reason,
+                        color = BriefTextPrimary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RichBriefSectionCard(section: RichBriefSection) {
+    val (accentColor, iconStr) = when (section.type.lowercase(Locale.US)) {
+        "attention" -> Pair(Color(0xFFEF4444), "⚠️")
+        "since_yesterday" -> Pair(Color(0xFF3B82F6), "🔄")
+        "finance" -> Pair(Color(0xFF10B981), "💰")
+        "information" -> Pair(Color(0xFF06B6D4), "ℹ️")
+        "lifecycle" -> Pair(Color(0xFF8B5CF6), "📅")
+        else -> Pair(Color(0xFF94A3B8), "💡")
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = BriefSurface,
+        border = BorderStroke(1.dp, BriefDivider)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(accentColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = iconStr, fontSize = 14.sp)
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = section.title,
+                    color = BriefTextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                section.items.forEach { bullet ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 7.dp)
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(accentColor)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = bullet,
+                            color = BriefTextPrimary.copy(alpha = 0.9f),
+                            fontSize = 13.5.sp,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BriefClosingCard(message: String) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = BriefSurfaceAlt,
+        border = BorderStroke(1.dp, BriefDivider)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = "✨", fontSize = 18.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "AI Closing Priorities",
+                    color = BriefAccent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = message,
+                color = BriefTextPrimary,
+                fontSize = 13.sp,
+                lineHeight = 20.sp
+            )
+        }
     }
 }
 

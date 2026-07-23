@@ -16,13 +16,44 @@ object JarvisReminderManager {
 
     private const val TAG = "JarvisReminderManager"
 
+    private fun setAlarmInOS(context: Context, alarmManager: AlarmManager, triggerTime: Long, pendingIntent: PendingIntent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+            } else {
+                Log.w(TAG, "Exact alarm permission not granted. Falling back to setAndAllowWhileIdle (inexact).")
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+            }
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setExactAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerTime,
+                pendingIntent
+            )
+        } else {
+            alarmManager.setExact(
+                AlarmManager.RTC_WAKEUP,
+                triggerTime,
+                pendingIntent
+            )
+        }
+    }
+
     fun scheduleReminder(context: Context, reminder: ReminderEntity) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 // 1. Save reminder to local DB + sync to Supabase tasks table
                 com.pradeep.jarviscollector.repository.TodoRepository.setReminder(context, reminder)
                 
-                // 2. Set Exact Alarm in OS AlarmManager
+                // 2. Set Alarm in OS AlarmManager
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val intent = Intent(context, JarvisReminderReceiver::class.java).apply {
                     putExtra("reminder_id", reminder.reminder_id)
@@ -40,19 +71,7 @@ object JarvisReminderManager {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        reminder.scheduled_timestamp,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        reminder.scheduled_timestamp,
-                        pendingIntent
-                    )
-                }
+                setAlarmInOS(context, alarmManager, reminder.scheduled_timestamp, pendingIntent)
                 
                 Log.d(TAG, "Successfully scheduled alarm for target: ${reminder.title} at ${reminder.scheduled_timestamp}")
             } catch (e: Exception) {
@@ -83,7 +102,7 @@ object JarvisReminderManager {
                 // 1. Save locally to Room
                 db.reminderDao().insert(reminder)
                 
-                // 2. Set Exact Alarm in OS AlarmManager
+                // 2. Set Alarm in OS AlarmManager
                 val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
                 val intent = Intent(context, JarvisReminderReceiver::class.java).apply {
                     putExtra("reminder_id", reminder.reminder_id)
@@ -101,19 +120,7 @@ object JarvisReminderManager {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP,
-                        reminder.scheduled_timestamp,
-                        pendingIntent
-                    )
-                } else {
-                    alarmManager.setExact(
-                        AlarmManager.RTC_WAKEUP,
-                        reminder.scheduled_timestamp,
-                        pendingIntent
-                    )
-                }
+                setAlarmInOS(context, alarmManager, reminder.scheduled_timestamp, pendingIntent)
                 Log.d(TAG, "[Local] Scheduled alarm for: ${reminder.title} at ${reminder.scheduled_timestamp}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to schedule local alarm: ${reminder.reminder_id}", e)

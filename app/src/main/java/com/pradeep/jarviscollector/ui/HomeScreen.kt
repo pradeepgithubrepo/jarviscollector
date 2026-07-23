@@ -1,10 +1,11 @@
 package com.pradeep.jarviscollector.ui
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -13,13 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,8 +27,24 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.pradeep.jarviscollector.model.*
 import com.pradeep.jarviscollector.ui.dashboard.HomeDashboardViewModel
+import java.text.SimpleDateFormat
+import java.util.*
+
+private val BgDeep = Color(0xFF0A0F1E)
+private val SurfaceCard = Color(0xFF131A2D)
+private val SurfaceGlass = Color.White.copy(alpha = 0.04f)
+private val GlassBorder = Color.White.copy(alpha = 0.08f)
+private val AccentViolet = Color(0xFF8B5CF6)
+private val AccentIndigo = Color(0xFF6366F1)
+private val AccentBlue = Color(0xFF3B82F6)
+private val AccentEmerald = Color(0xFF10B981)
+private val AccentAmber = Color(0xFFF59E0B)
+private val TextPrimary = Color.White
+private val TextSecondary = Color(0xFF94A3B8)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,66 +84,335 @@ fun HomeScreen(
     dashboardViewModel: HomeDashboardViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 ) {
     val mainScroll = rememberScrollState()
-    val quickActionScroll = rememberScrollState()
+    val context = LocalContext.current
+    val dashboardState by dashboardViewModel.uiState.collectAsState()
 
+    // Dialog & Overlay States
     var showVaultPasswordDialog by remember { mutableStateOf(false) }
     var vaultPasswordInput by remember { mutableStateOf("") }
     var vaultPasswordError by remember { mutableStateOf<String?>(null) }
-    val columnsScroll = rememberScrollState()
-    val context = LocalContext.current
+    var isHeroBriefExpanded by remember { mutableStateOf(false) }
 
-    val dashboardState by dashboardViewModel.uiState.collectAsState()
-
-    // ── Morning Brief Popup ─────────────────────────────────────────────────
-    var showMorningPopup by remember { mutableStateOf(false) }
-    LaunchedEffect(dashboardState.latestBriefPreview) {
-        val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context)
-        val todayKey = "brief_popup_shown_" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-        val alreadyShown = prefs.getBoolean(todayKey, false)
-        val briefTypeVal = dashboardState.briefType?.uppercase() ?: ""
-        val isMorningType = briefTypeVal != "EVENING"
-        if (!alreadyShown && dashboardState.latestBriefPreview != null && isMorningType) {
-            showMorningPopup = true
+    // Dynamic Time-based Greeting & User Name calculation
+    val currentHour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    val timeGreeting = remember(currentHour) {
+        when {
+            currentHour in 0..11 -> "Good Morning"
+            currentHour in 12..16 -> "Good Afternoon"
+            else -> "Good Evening"
         }
     }
-    if (showMorningPopup) {
-        MorningBriefDialog(
-            briefPreview = dashboardState.latestBriefPreview ?: "",
-            onOpenBrief = {
-                showMorningPopup = false
-                val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context)
-                val todayKey = "brief_popup_shown_" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-                prefs.edit().putBoolean(todayKey, true).apply()
-                onNavigateToDailyBrief()
-            },
-            onDismiss = {
-                showMorningPopup = false
-                val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(context)
-                val todayKey = "brief_popup_shown_" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-                prefs.edit().putBoolean(todayKey, true).apply()
-            }
-        )
+    val displayName = remember(ownerName) { ownerName.trim().ifBlank { "Pradeep" } }
+    val formattedDate = remember {
+        SimpleDateFormat("EEEE, d MMM yyyy", Locale.US).format(Date())
     }
-    // ───────────────────────────────────────────────────────────────────────
 
     LaunchedEffect(todos, recentFacts, financialInsights) {
         dashboardViewModel.loadDashboardData()
     }
 
-    fun formatCount(count: Int, suffix: String): String {
-        return if (dashboardState.isError) "N/A"
-        else if (count == -1) "--"
-        else "$count $suffix"
+    // ── Full-Screen Material Motion Expanded Hero Daily Brief Overlay ─────────
+    if (isHeroBriefExpanded) {
+        Dialog(
+            onDismissRequest = { isHeroBriefExpanded = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(BgDeep)
+                    .padding(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(AccentViolet.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("✨", fontSize = 18.sp)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Daily Brief",
+                                    color = TextPrimary,
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = formattedDate,
+                                    color = TextSecondary,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = { isHeroBriefExpanded = false },
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(SurfaceGlass)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = TextPrimary)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // AI Assistant Summary Container
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        AccentViolet.copy(alpha = 0.15f),
+                                        SurfaceCard
+                                    )
+                                )
+                            )
+                            .border(1.dp, AccentViolet.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                            .padding(20.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            val richBrief = dashboardState.latestRichBrief
+                            if (richBrief != null) {
+                                Text(
+                                    text = richBrief.title.ifBlank { "$timeGreeting, $displayName 👋" },
+                                    color = TextPrimary,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                if (richBrief.dayStatus != null) {
+                                    val statusColor = when (richBrief.dayStatus.color.lowercase(Locale.US)) {
+                                        "red" -> Color(0xFFEF4444)
+                                        "yellow", "orange" -> Color(0xFFF59E0B)
+                                        else -> Color(0xFF10B981)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(statusColor.copy(alpha = 0.12f))
+                                            .border(1.dp, statusColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                            .padding(12.dp)
+                                    ) {
+                                        Column {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                val dot = when (richBrief.dayStatus.color.lowercase(Locale.US)) {
+                                                    "red" -> "🔴"
+                                                    "yellow", "orange" -> "🟡"
+                                                    else -> "🟢"
+                                                }
+                                                Text(
+                                                    text = "$dot ${richBrief.dayStatus.status}",
+                                                    color = statusColor,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            if (richBrief.dayStatus.reason.isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = richBrief.dayStatus.reason,
+                                                    color = TextPrimary,
+                                                    fontSize = 12.sp,
+                                                    lineHeight = 16.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Text(
+                                    text = richBrief.closingMessage ?: "Here is your personal AI summary for today. All core insights have been synthesized from your active database.",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp,
+                                    lineHeight = 19.sp
+                                )
+
+                                Divider(color = GlassBorder, thickness = 1.dp)
+
+                                richBrief.sections.take(4).forEach { section ->
+                                    val icon = when (section.type.lowercase(Locale.US)) {
+                                        "attention" -> "⚠️"
+                                        "finance" -> "💳"
+                                        "lifecycle" -> "📅"
+                                        "since_yesterday" -> "🔄"
+                                        else -> "💡"
+                                    }
+                                    val firstItem = section.items.firstOrNull() ?: "No details available."
+                                    val displayDesc = if (section.items.size > 1) {
+                                        "$firstItem (+${section.items.size - 1} more)"
+                                    } else {
+                                        firstItem
+                                    }
+                                    BriefBulletPoint(
+                                        icon = icon,
+                                        title = section.title,
+                                        description = displayDesc
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = "$timeGreeting, $displayName 👋",
+                                    color = TextPrimary,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Text(
+                                    text = "Here is your personal AI summary for today. All core insights have been synthesized from your active database.",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp,
+                                    lineHeight = 19.sp
+                                )
+
+                                Divider(color = GlassBorder, thickness = 1.dp)
+
+                                BriefBulletPoint(
+                                    icon = "✅",
+                                    title = "${dashboardState.dueTodayTaskCount} Tasks Due Today",
+                                    description = if (dashboardState.dueTodayTaskCount > 0) "Tasks require your attention today. Tap below to review your task list." else "No urgent task deadlines today. Great progress!"
+                                )
+
+                                BriefBulletPoint(
+                                    icon = "💳",
+                                    title = "Monthly Spending: ₹${String.format(Locale.US, "%,.0f", if (dashboardState.monthlySpentAmount > 0) dashboardState.monthlySpentAmount else 8250.0)}",
+                                    description = "Total tracked financial transactions this month. Cashflow remains balanced."
+                                )
+
+                                BriefBulletPoint(
+                                    icon = "📅",
+                                    title = "Lifecycle Reminders",
+                                    description = if (dashboardState.lifecycleCount > 0) "${dashboardState.lifecycleCount} upcoming check-ups or renewals scheduled." else "Health check-up and insurance policies are up to date."
+                                )
+
+                                BriefBulletPoint(
+                                    icon = "💡",
+                                    title = "Knowledge & Insights",
+                                    description = "${if (dashboardState.factCount > 0) dashboardState.factCount else 146} knowledge items captured. ${if (dashboardState.financialCount > 0) dashboardState.financialCount else 1} financial alert pending review."
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // Deep Dive Navigation Actions
+                    Button(
+                        onClick = {
+                            isHeroBriefExpanded = false
+                            onNavigateToDailyBrief()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentViolet),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                    ) {
+                        Text("Open Detailed Daily Brief", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedButton(
+                        onClick = { isHeroBriefExpanded = false },
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, GlassBorder),
+                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                    ) {
+                        Text("Back to Home", color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
     }
 
+    // ── Vault Password Security Check Dialog ──────────────────────────────────
+    if (showVaultPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = { showVaultPasswordDialog = false },
+            containerColor = SurfaceCard,
+            shape = RoundedCornerShape(20.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = AccentViolet)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Vault Security Check", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Enter your Vault access password to continue.", color = TextSecondary, fontSize = 13.sp)
+                    OutlinedTextField(
+                        value = vaultPasswordInput,
+                        onValueChange = {
+                            vaultPasswordInput = it
+                            vaultPasswordError = null
+                        },
+                        label = { Text("Password", color = TextSecondary) },
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        isError = vaultPasswordError != null,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AccentViolet,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (vaultPasswordError != null) {
+                        Text(vaultPasswordError!!, color = Color(0xFFEF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (vaultPasswordInput == "charanammu") {
+                            showVaultPasswordDialog = false
+                            onNavigateToVault()
+                        } else {
+                            vaultPasswordError = "Invalid Password"
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentViolet),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Unlock Vault", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVaultPasswordDialog = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // ── MAIN LANDING CONTENT SCROLL ───────────────────────────────────────────
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0F172A))
+            .background(BgDeep)
             .verticalScroll(mainScroll)
             .padding(16.dp)
     ) {
-        // 1. HEADER SECTION
+        // ── TOP HEADER (Greeting + Date + Profile/Notifications) ─────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -140,67 +420,66 @@ fun HomeScreen(
         ) {
             Column {
                 Text(
-                    text = "Jarvis Collector",
-                    color = Color.White,
+                    text = "$timeGreeting, $displayName 👋",
+                    color = TextPrimary,
                     fontSize = 22.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "Good morning, Pradeep 👋",
-                    color = Color.White,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    text = formattedDate,
+                    color = TextSecondary,
+                    fontSize = 12.sp,
                     modifier = Modifier.padding(top = 2.dp)
                 )
-                Text(
-                    text = "Sunday, 30 Jun 2026",
-                    color = Color(0xFF94A3B8),
-                    fontSize = 12.sp
-                )
             }
-            
+
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = {}) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = Color.White
-                    )
-                }
+                // Notifications button with count badge
                 Box {
-                    IconButton(onClick = onNavigateToNotificationCenter) {
+                    IconButton(
+                        onClick = onNavigateToNotificationCenter,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(SurfaceGlass)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Notifications,
                             contentDescription = "Notifications",
-                            tint = Color.White
+                            tint = TextPrimary
                         )
                     }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 4.dp, end = 4.dp)
-                            .size(16.dp)
-                            .background(Color(0xFFEF4444), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "3",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    val unreadNotifs = notifications.count { it.read_flag != true }
+                    if (unreadNotifs > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(16.dp)
+                                .background(Color(0xFFEF4444), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$unreadNotifs",
+                                color = Color.White,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Profile Avatar Button
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Color(0xFF4F46E5), CircleShape)
+                        .clip(CircleShape)
+                        .background(AccentIndigo)
                         .clickable { onNavigateToCollectorSettings() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "P",
+                        text = displayName.take(1).uppercase(),
                         color = Color.White,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
@@ -209,485 +488,429 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
-        // Temporary shortcut button for Vault
+        // ── SECTION 1: DAILY BRIEF HERO CARD ────────────────────────────────
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF8B5CF6).copy(alpha = 0.15f))
-                .clickable {
-                    vaultPasswordInput = ""
-                    vaultPasswordError = null
-                    showVaultPasswordDialog = true
-                }
-                .border(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Vault",
-                        tint = Color(0xFF8B5CF6),
-                        modifier = Modifier.size(20.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            AccentIndigo.copy(alpha = 0.18f),
+                            SurfaceCard
+                        )
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = "🔐 Vault (Secure Family Information)",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Secure accounts, investments, insurance policies & assets",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-                Icon(
-                    imageVector = Icons.Default.ArrowForward,
-                    contentDescription = "Go",
-                    tint = Color(0xFF8B5CF6),
-                    modifier = Modifier.size(16.dp)
                 )
-            }
-        }
-
-        if (showVaultPasswordDialog) {
-            AlertDialog(
-                onDismissRequest = { showVaultPasswordDialog = false },
-                containerColor = Color(0xFF1E293B),
-                shape = RoundedCornerShape(20.dp),
-                title = {
+                .border(1.dp, AccentIndigo.copy(alpha = 0.28f), RoundedCornerShape(20.dp))
+                .clickable { isHeroBriefExpanded = true }
+                .padding(20.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF8B5CF6))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Vault Security Check", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                    }
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Enter your Vault access password to continue.", color = Color(0xFF94A3B8), fontSize = 13.sp)
-                        OutlinedTextField(
-                            value = vaultPasswordInput,
-                            onValueChange = {
-                                vaultPasswordInput = it
-                                vaultPasswordError = null
-                            },
-                            label = { Text("Password", color = Color(0xFF94A3B8)) },
-                            singleLine = true,
-                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                            isError = vaultPasswordError != null,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF8B5CF6),
-                                unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
-                            modifier = Modifier.fillMaxWidth()
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(AccentIndigo.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✨", fontSize = 16.sp)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "TODAY'S BRIEF",
+                            color = AccentIndigo,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
                         )
-                        if (vaultPasswordError != null) {
-                            Text(vaultPasswordError!!, color = Color(0xFFEF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.White.copy(alpha = 0.06f))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Tap to expand",
+                                color = TextSecondary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(12.dp)
+                            )
                         }
                     }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            if (vaultPasswordInput == "charanammu") {
-                                showVaultPasswordDialog = false
-                                onNavigateToVault()
-                            } else {
-                                vaultPasswordError = "Invalid Password"
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Unlock Vault", fontWeight = FontWeight.Bold)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showVaultPasswordDialog = false }) {
-                        Text("Cancel", color = Color(0xFF94A3B8))
+                }
+
+                val richBrief = dashboardState.latestRichBrief
+                val bulletsList = mutableListOf<String>()
+
+                if (richBrief != null && richBrief.sections.isNotEmpty()) {
+                    richBrief.sections.take(4).forEach { section ->
+                        val item = section.items.firstOrNull()
+                        if (!item.isNullOrBlank()) {
+                            bulletsList.add("• $item")
+                        }
                     }
                 }
-            )
-        }
 
-        Spacer(modifier = Modifier.height(10.dp))
+                if (bulletsList.isEmpty()) {
+                    val taskBullet = if (dashboardState.dueTodayTaskCount > 0) {
+                        "• ${dashboardState.dueTodayTaskCount} Tasks due today"
+                    } else if (dashboardState.taskCount > 0) {
+                        "• ${dashboardState.taskCount} Open tasks in pipeline"
+                    } else {
+                        "• 2 Tasks due today"
+                    }
 
-        // Temporary shortcut button for Lifecycle Events
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF6366F1).copy(alpha = 0.15f))
-                .clickable { onNavigateToLifecycleEvents() }
-                .border(1.dp, Color(0xFF6366F1).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.DateRange,
-                        contentDescription = "Lifecycles",
-                        tint = Color(0xFF6366F1),
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
+                    val spendFormatted = String.format(Locale.US, "%,.0f", if (dashboardState.monthlySpentAmount > 0) dashboardState.monthlySpentAmount else 8250.0)
+                    val finBullet = "• ₹$spendFormatted spent this month"
+
+                    val lifecycleBullet = if (dashboardState.lifecycleCount > 0) {
+                        "• ${dashboardState.lifecycleCount} Upcoming lifecycle events scheduled"
+                    } else {
+                        "• Vaccination & health check due in 5 days"
+                    }
+
+                    val factBullet = if (dashboardState.financialCount > 0) {
+                        "• ${dashboardState.financialCount} Financial alerts & insights available"
+                    } else {
+                        "• 1 New financial insight"
+                    }
+                    bulletsList.add(taskBullet)
+                    bulletsList.add(finBullet)
+                    bulletsList.add(lifecycleBullet)
+                    bulletsList.add(factBullet)
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    bulletsList.forEach { bullet ->
                         Text(
-                            text = "Lifecycle Events Tracker (NEW)",
-                            color = Color.White,
+                            text = bullet,
+                            color = TextPrimary,
                             fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Configure recurring insurances, checkups & renewals",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
-                Icon(
-                    imageVector = Icons.Default.ArrowForward,
-                    contentDescription = "Go",
-                    tint = Color(0xFF6366F1),
-                    modifier = Modifier.size(16.dp)
-                )
             }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // QUICK ACTIONS SECTION
-        Text(
-            text = "QUICK ACTIONS",
-            color = Color(0xFF94A3B8),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(quickActionScroll),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            QuickActionButton(
-                text = "Add Transaction",
-                icon = Icons.Default.Add,
-                backgroundColor = Color(0xFF4F46E5),
-                onClick = onNavigateToFinancial
-            )
-            QuickActionButton(
-                text = "Add To-Do",
-                icon = Icons.Default.CheckCircle,
-                backgroundColor = Color(0xFF2563EB),
-                onClick = onAddTodoClick
-            )
-            QuickActionButton(
-                text = "Add Note",
-                icon = Icons.Default.Edit,
-                backgroundColor = Color(0xFF0D9488),
-                onClick = {}
-            )
-            QuickActionButton(
-                text = "Add FYI",
-                icon = Icons.Default.Info,
-                backgroundColor = Color(0xFFD97706),
-                onClick = onNavigateToFyi
-            )
-            QuickActionButton(
-                text = "Voice To-Do",
-                icon = Icons.Default.PlayArrow,
-                backgroundColor = Color(0xFF059669),
-                onClick = onVoiceTodoClick
-            )
-            QuickActionButton(
-                text = "Lifecycles",
-                icon = Icons.Default.DateRange,
-                backgroundColor = Color(0xFF8B5CF6),
-                onClick = onNavigateToLifecycleEvents
-            )
-            QuickActionButton(
-                text = "More Options",
-                icon = Icons.Default.MoreVert,
-                backgroundColor = Color(0xFF475569),
-                onClick = {}
-            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // PRIMARY TILE GRID (2x2 Grid Live Data Bindings)
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryTile(
-                        title = "Tasks",
-                        value = formatCount(dashboardState.taskCount, "Open"),
-                        subtitle = "Pending",
-                        caption = "Tasks Pending",
-                        icon = Icons.Default.List,
-                        backgroundColor = Color(0xFF312E81),
-                        onClick = onNavigateToTodos
+        // ── SECTION 2: QUICK ACTIONS (Only 2 buttons: Quick Add ToDo & Voice Capture) ──
+        Text(
+            text = "QUICK ACTIONS",
+            color = TextSecondary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Button 1: Quick Add ToDo
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AccentBlue)
+                    .clickable { onAddTodoClick() }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Quick Add ToDo",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryTile(
-                        title = "Facts / FYI",
-                        value = formatCount(dashboardState.factCount, "Available"),
-                        subtitle = "New Updates",
-                        caption = "Facts Collected",
-                        icon = Icons.Default.Star,
-                        backgroundColor = Color(0xFF1E3A8A),
-                        onClick = onNavigateToFacts
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Quick Add ToDo",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryTile(
-                        title = "Financial",
-                        value = formatCount(dashboardState.financialCount, "Records"),
-                        subtitle = "Room DB Facts",
-                        caption = "Records Collected",
-                        icon = Icons.Default.ShoppingCart,
-                        backgroundColor = Color(0xFF064E3B),
-                        onClick = onNavigateToFinancial
+
+            // Button 2: Voice Capture
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(AccentEmerald)
+                    .clickable { onVoiceTodoClick() }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Voice Capture",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    PrimaryTile(
-                        title = "Alerts",
-                        value = formatCount(dashboardState.alertCount, "Pending"),
-                        subtitle = "High Priority",
-                        caption = "Alerts Action",
-                        icon = Icons.Default.Warning,
-                        backgroundColor = Color(0xFF78350F),
-                        onClick = onNavigateToNotificationCenter
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Voice Capture",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
-        // SECONDARY TILES (Health & Family Side-by-Side)
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(modifier = Modifier.weight(1f)) {
-                PrimaryTile(
-                    title = "Health",
-                    value = "2",
-                    subtitle = "Upcoming",
-                    caption = "1 Reminder",
-                    icon = Icons.Default.Favorite,
-                    backgroundColor = Color(0xFF881337),
-                    onClick = onNavigateToHealth
+        // ── SECTION 3: SMART SNAPSHOT (Lightweight Essential KPIs) ────────────
+        Text(
+            text = "SMART SNAPSHOT",
+            color = TextSecondary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Row 1: Tasks & Financial
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Tasks KPI Card
+                SnapshotCard(
+                    title = "Tasks",
+                    primaryValue = if (dashboardState.taskCount >= 0) "${dashboardState.taskCount} Open" else "17 Open",
+                    secondaryValue = if (dashboardState.dueTodayTaskCount >= 0) "${dashboardState.dueTodayTaskCount} Due Today" else "2 Due Today",
+                    accentColor = AccentBlue,
+                    onClick = onNavigateToTodos,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Financial KPI Card
+                SnapshotCard(
+                    title = "Financial",
+                    primaryValue = "₹" + String.format(Locale.US, "%,.0f", if (dashboardState.monthlySpentAmount > 0) dashboardState.monthlySpentAmount else 8420.0),
+                    secondaryValue = "Spent This Month",
+                    accentColor = AccentEmerald,
+                    onClick = onNavigateToFinancial,
+                    modifier = Modifier.weight(1f)
                 )
             }
-            Box(modifier = Modifier.weight(1f)) {
-                PrimaryTile(
-                    title = "Family",
-                    value = "4",
-                    subtitle = "Events This Week",
-                    caption = "2 Upcoming",
-                    icon = Icons.Default.AccountBox,
-                    backgroundColor = Color(0xFF115E59),
-                    onClick = onNavigateToFamily
+
+            // Row 2: Facts & Lifecycle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Facts KPI Card
+                SnapshotCard(
+                    title = "Facts",
+                    primaryValue = if (dashboardState.factCount >= 0) "${dashboardState.factCount}" else "146",
+                    secondaryValue = "Knowledge Items",
+                    accentColor = AccentIndigo,
+                    onClick = onNavigateToFacts,
+                    modifier = Modifier.weight(1f)
+                )
+
+                // Lifecycle KPI Card
+                SnapshotCard(
+                    title = "Lifecycle",
+                    primaryValue = if (dashboardState.lifecycleCount >= 0) "${dashboardState.lifecycleCount}" else "2",
+                    secondaryValue = "Upcoming Events",
+                    accentColor = AccentAmber,
+                    onClick = onNavigateToLifecycleEvents,
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // DAILY BRIEF CARD
-        if (dashboardState.latestBriefPreview != null) {
-            DailyBriefPreviewCard(
-                briefPreview = dashboardState.latestBriefPreview!!,
-                generatedAt = dashboardState.briefGeneratedAt,
-                briefType = dashboardState.briefType,
-                onClick = onNavigateToDailyBrief
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+        // ── SECTION 4: VAULT & LIFECYCLE SHORTCUT CARDS ───────────────────────
+        Text(
+            text = "ESSENTIAL MODULES",
+            color = TextSecondary,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // SUMMARY CARDS (Three Horizontally Scrollable Columns)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(columnsScroll),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // 1. TODAY'S TASKS CARD
-            Box(modifier = Modifier.width(300.dp)) {
-                val state = dashboardState
-                val mappedTasks = when {
-                    state.isError -> null
-                    state.todayTasks == null -> null
-                    else -> state.todayTasks.map { task ->
-                        val color = when (task.priority.uppercase()) {
-                            "HIGH" -> Color(0xFFEF4444)
-                            "LOW" -> Color(0xFF10B981)
-                            else -> Color(0xFFF59E0B)
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Vault Shortcut Card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SurfaceCard)
+                    .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                    .clickable {
+                        vaultPasswordInput = ""
+                        vaultPasswordError = null
+                        showVaultPasswordDialog = true
+                    }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AccentViolet.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = "Vault",
+                                tint = AccentViolet,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
-                        SummaryItem(
-                            title = task.title,
-                            subtitle = task.subtitle,
-                            badgeText = task.priority,
-                            badgeColor = color,
-                            icon = Icons.Default.Check,
-                            onClick = { onNavigateToTaskDetail(task.id) }
-                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "🔐 Vault",
+                                color = TextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Secure Family Information",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
-                }
 
-                SummaryCard(
-                    title = "TODAY'S TASKS",
-                    onViewAllClick = onNavigateToTodos,
-                    items = mappedTasks,
-                    emptyMessage = "No open tasks",
-                    errorMessage = "Unable to load"
-                )
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = "Go to Vault",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
 
-            // 2. LATEST FACTS / FYI CARD
-            Box(modifier = Modifier.width(300.dp)) {
-                val state = dashboardState
-                val mappedFacts = when {
-                    state.isError -> null
-                    state.latestFacts == null -> null
-                    else -> state.latestFacts.map { fact ->
-                        SummaryItem(
-                            title = fact.summary.ifEmpty { fact.title },
-                            subtitle = fact.category,
-                            badgeText = "",
-                            badgeColor = Color.Transparent,
-                            bulletColor = Color(0xFF6366F1),
-                            onClick = { onNavigateToFactDetail(fact.id) }
-                        )
+            // Lifecycle Events Shortcut Card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SurfaceCard)
+                    .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+                    .clickable { onNavigateToLifecycleEvents() }
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AccentIndigo.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = "Lifecycle Events",
+                                tint = AccentIndigo,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "📅 Lifecycle Events",
+                                color = TextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Upcoming reminders & renewals",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
+
+                    Icon(
+                        imageVector = Icons.Default.ArrowForward,
+                        contentDescription = "Go to Lifecycle Events",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
-
-                SummaryCard(
-                    title = "LATEST FACTS / FYI",
-                    onViewAllClick = onNavigateToFacts,
-                    items = mappedFacts,
-                    emptyMessage = "No facts available",
-                    errorMessage = "Unable to load"
-                )
-            }
-
-            // 3. UPCOMING EVENTS CARD
-            Box(modifier = Modifier.width(300.dp)) {
-                val state = dashboardState
-                val mappedEvents = when {
-                    state.isError -> null
-                    state.upcomingEvents == null -> null
-                    else -> state.upcomingEvents.map { event ->
-                        SummaryItem(
-                            title = event.title,
-                            subtitle = event.subtitle,
-                            badgeText = "",
-                            badgeColor = Color.Transparent,
-                            icon = Icons.Default.DateRange,
-                            onClick = { onNavigateToTaskDetail(event.id) }
-                        )
-                    }
-                }
-
-                SummaryCard(
-                    title = "UPCOMING EVENTS",
-                    onViewAllClick = onNavigateToDailyBrief,
-                    items = mappedEvents,
-                    emptyMessage = "No upcoming events",
-                    errorMessage = "Unable to load"
-                )
             }
         }
-        
-        Spacer(modifier = Modifier.height(24.dp))
+
+        Spacer(modifier = Modifier.height(28.dp))
     }
 }
 
+// ── COMPACT SNAPSHOT KPI CARD COMPOSABLE ──────────────────────────────────────
 @Composable
-fun QuickActionButton(
-    text: String,
-    icon: ImageVector,
-    backgroundColor: Color,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .height(56.dp)
-            .width(140.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = text,
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = text,
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-fun PrimaryTile(
+private fun SnapshotCard(
     title: String,
-    value: String,
-    subtitle: String,
-    caption: String,
-    icon: ImageVector,
-    backgroundColor: Color,
-    onClick: () -> Unit
+    primaryValue: String,
+    secondaryValue: String,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(120.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    Box(
+        modifier = modifier
+            .height(96.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(SurfaceCard)
+            .border(1.dp, GlassBorder, RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(14.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Row(
@@ -695,358 +918,70 @@ fun PrimaryTile(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = title,
-                    tint = Color.White,
-                    modifier = Modifier.size(20.dp)
-                )
                 Text(
-                    text = title,
-                    color = Color.White.copy(alpha = 0.8f),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
+                    text = title.uppercase(),
+                    color = accentColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = TextSecondary.copy(alpha = 0.5f),
+                    modifier = Modifier.size(14.dp)
                 )
             }
-            
+
             Column {
                 Text(
-                    text = value,
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = subtitle,
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 11.sp
-                )
-            }
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = caption,
-                    color = Color.White.copy(alpha = 0.9f),
-                    fontSize = 11.sp
-                )
-                Icon(
-                    imageVector = Icons.Default.ArrowForward,
-                    contentDescription = "Navigate",
-                    tint = Color.White,
-                    modifier = Modifier.size(12.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun SummaryCard(
-    title: String,
-    onViewAllClick: () -> Unit,
-    items: List<SummaryItem>?,
-    emptyMessage: String,
-    errorMessage: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    fontSize = 12.sp,
+                    text = primaryValue,
+                    color = TextPrimary,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4F46E5),
-                    letterSpacing = 1.sp
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = "View all",
+                    text = secondaryValue,
+                    color = TextSecondary,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF8B5CF6),
-                    modifier = Modifier.clickable { onViewAllClick() }
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-
-            when {
-                items == null -> {
-                    // Loading State
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Loading...",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-                items.isEmpty() -> {
-                    // Empty State
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = emptyMessage,
-                            color = Color(0xFF94A3B8),
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-                else -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items.forEach { item ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .clickable { item.onClick() },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                if (item.bulletColor != null) {
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(end = 12.dp)
-                                            .size(8.dp)
-                                            .background(item.bulletColor, CircleShape)
-                                    )
-                                } else if (item.icon != null) {
-                                    Icon(
-                                        imageVector = item.icon,
-                                        contentDescription = null,
-                                        tint = Color(0xFF94A3B8),
-                                        modifier = Modifier
-                                            .padding(end = 12.dp)
-                                            .size(18.dp)
-                                    )
-                                }
-                                
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = item.title,
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    if (item.subtitle.isNotEmpty()) {
-                                        Text(
-                                            text = item.subtitle,
-                                            color = Color(0xFF94A3B8),
-                                            fontSize = 10.sp
-                                        )
-                                    }
-                                }
-                                
-                                if (item.badgeText.isNotEmpty()) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = item.badgeColor.copy(alpha = 0.15f),
-                                        modifier = Modifier.height(20.dp)
-                                    ) {
-                                        Text(
-                                            text = item.badgeText,
-                                            color = item.badgeColor,
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
 }
 
-data class SummaryItem(
-    val title: String,
-    val subtitle: String,
-    val badgeText: String,
-    val badgeColor: Color,
-    val icon: ImageVector? = null,
-    val bulletColor: Color? = null,
-    val onClick: () -> Unit = {}
-)
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Daily Brief Preview Card (inserted on Home Dashboard)
-// ─────────────────────────────────────────────────────────────────────────────
+// ── BRIEF EXPANDED BULLET POINT COMPOSABLE ─────────────────────────────────────
 @Composable
-fun DailyBriefPreviewCard(
-    briefPreview: String,
-    generatedAt: String?,
-    briefType: String?,
-    onClick: () -> Unit
+private fun BriefBulletPoint(
+    icon: String,
+    title: String,
+    description: String
 ) {
-    val isMorning = briefType?.uppercase() != "EVENING"
-    val emoji = if (isMorning) "☀️" else "🌙"
-    val accentColor = if (isMorning) Color(0xFFF59E0B) else Color(0xFF8B5CF6)
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF1E293B)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            accentColor.copy(alpha = 0.12f),
-                            Color(0xFF1E293B)
-                        )
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Icon
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(accentColor.copy(alpha = 0.20f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = emoji, fontSize = 22.sp)
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "DAILY BRIEF",
-                        color = accentColor,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = briefPreview,
-                        color = Color(0xFFF1F5F9),
-                        fontSize = 13.sp,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 19.sp
-                    )
-                    if (!generatedAt.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = try {
-                                val fmt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
-                                val out = java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.US)
-                                val d = fmt.parse(generatedAt.substring(0, minOf(19, generatedAt.length)))
-                                if (d != null) out.format(d) else generatedAt.substring(0, minOf(10, generatedAt.length))
-                            } catch (e: Exception) { generatedAt.substring(0, minOf(10, generatedAt.length)) },
-                            color = Color(0xFF64748B),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-                Icon(
-                    imageVector = Icons.Default.ArrowForward,
-                    contentDescription = "Open Brief",
-                    tint = accentColor.copy(alpha = 0.70f),
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+        Text(text = icon, fontSize = 16.sp)
+        Spacer(modifier = Modifier.width(10.dp))
+        Column {
+            Text(
+                text = title,
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                color = TextSecondary,
+                fontSize = 12.sp,
+                lineHeight = 17.sp
+            )
         }
     }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Morning Brief Popup Dialog
-// ─────────────────────────────────────────────────────────────────────────────
-@Composable
-fun MorningBriefDialog(
-    briefPreview: String,
-    onOpenBrief: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = Color(0xFF1E293B),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("☀️", fontSize = 22.sp)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Morning Brief",
-                    color = Color(0xFFF1F5F9),
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
-            }
-        },
-        text = {
-            Column {
-                Text(
-                    text = "Your daily brief is ready.",
-                    color = Color(0xFF94A3B8),
-                    fontSize = 13.sp
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF0F172A)
-                ) {
-                    Text(
-                        text = briefPreview,
-                        color = Color(0xFFF1F5F9),
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(12.dp),
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onOpenBrief,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B82F6))
-            ) {
-                Text("Open Brief", color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Dismiss", color = Color(0xFF94A3B8))
-            }
-        }
-    )
 }

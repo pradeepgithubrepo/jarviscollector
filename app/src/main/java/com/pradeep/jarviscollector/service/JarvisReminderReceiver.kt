@@ -196,4 +196,43 @@ class JarvisReminderReceiver : BroadcastReceiver() {
             else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) // Default
         }
     }
+
+    companion object {
+        fun triggerTestNotification(context: Context) {
+            val receiver = JarvisReminderReceiver()
+            val id = "test-notif-${System.currentTimeMillis()}"
+            receiver.postSystemNotification(
+                context,
+                id = id,
+                title = "Jarvis Notification Test",
+                message = "This is a diagnostic test alert checking the notification channel.",
+                soundType = "DEFAULT",
+                actionRoute = "home",
+                actionPayload = "{}"
+            )
+            
+            val db = JarvisDatabase.getDatabase(context)
+            val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+            val nowStr = sdf.format(Date())
+            val notificationEntity = NotificationEntity(
+                id = id,
+                title = "Jarvis Notification Test",
+                message = "This is a diagnostic test alert checking the notification channel.",
+                type = "REMINDER",
+                priority = "MEDIUM",
+                status = "NEW",
+                created_at = nowStr,
+                action_route = "home",
+                action_payload = "{}",
+                read_flag = false
+            )
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    db.notificationDao().insert(notificationEntity)
+                } catch (e: Exception) {
+                    Log.e("JarvisReminderReceiver", "Error inserting test notification log", e)
+                }
+            }
+        }
+    }
 }

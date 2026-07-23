@@ -18,7 +18,6 @@ import com.pradeep.jarviscollector.model.UserActionEntity
 import com.pradeep.jarviscollector.model.ReminderEntity
 import com.pradeep.jarviscollector.ui.*
 import com.pradeep.jarviscollector.ui.splash.SplashScreen
-import com.pradeep.jarviscollector.ui.name_selection.NameSelectionScreen
 import com.pradeep.jarviscollector.utils.AppPreferences
 import com.pradeep.jarviscollector.ui.facts.FactsScreen
 import com.pradeep.jarviscollector.ui.facts.FactDetailScreen
@@ -28,6 +27,8 @@ import com.pradeep.jarviscollector.ui.todo.TaskDetailScreen
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Alignment
@@ -114,23 +115,13 @@ fun JarvisNavHost(
         // Splash screen composable
         composable(Screen.Splash.route) {
             SplashScreen(
-                ownerName = ownerName,
+                ownerName = if (ownerName.isBlank()) "Pradeep" else ownerName,
                 onNavigateToHome = {
-                    if (ownerName.isBlank()) {
-                        navController.navigate(Screen.NameSelection.route) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
-                    } else {
-                        navController.navigate(Screen.Home.route) {
-                            popUpTo(Screen.Splash.route) { inclusive = true }
-                        }
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 }
             )
-        }
-        // Name selection screen composable
-        composable(Screen.NameSelection.route) {
-            NameSelectionScreen(navController = navController, onOwnerNameChange = onOwnerNameChange)
         }
 
         composable(Screen.Home.route) {
@@ -301,6 +292,8 @@ fun JarvisNavHost(
         }
 
         composable(Screen.Tasks.route) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val coroutineScope = rememberCoroutineScope()
             TodoScreen(
                 todos = todos,
                 reminders = reminders,
@@ -309,6 +302,12 @@ fun JarvisNavHost(
                 onSetReminder = onSetReminder,
                 onRemoveReminder = onRemoveReminder,
                 onDelete = onDeleteTodo,
+                onClearCompleted = {
+                    coroutineScope.launch {
+                        com.pradeep.jarviscollector.repository.TodoRepository.clearCompletedTodos(context)
+                        onLoadInsights() // Refresh local Room data
+                    }
+                },
                 onAddTodoClick = onAddTodoClick,
                 onVoiceTodoClick = onVoiceTodoClick,
                 onNavigateToTaskDetail = { id ->
@@ -535,7 +534,7 @@ fun JarvisNavHost(
                 facts = facts,
                 onConvertTodo = onConvertFactToTodo,
                 onDismissFact = { factId ->
-                    onDismissInsight(factId)
+                    onSwipeFactHardDelete(factId) { /* hard delete callback */ }
                     navController.popBackStack()
                 },
                 onBack = { navController.popBackStack() }

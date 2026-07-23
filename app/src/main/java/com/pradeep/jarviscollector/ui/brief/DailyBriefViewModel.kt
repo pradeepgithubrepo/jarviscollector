@@ -24,10 +24,108 @@ data class BriefPayloadSection(
     val bullets: List<String>
 )
 
+data class RichDailyBrief(
+    val title: String,
+    val sections: List<RichBriefSection>,
+    val dayStatus: RichDayStatus?,
+    val closingMessage: String?,
+    val overallPriority: String?
+)
+
+data class RichBriefSection(
+    val type: String,
+    val title: String,
+    val items: List<String>
+)
+
+data class RichDayStatus(
+    val color: String,
+    val reason: String,
+    val status: String
+)
+
+fun DailyBriefEntity.parseToRichBrief(): RichDailyBrief {
+    if (!payloadJson.isNullOrBlank()) {
+        try {
+            val root = JSONObject(payloadJson)
+            val titleObj = root.optString("title", "")
+            val sectionsArray = root.optJSONArray("sections")
+            val richSections = mutableListOf<RichBriefSection>()
+            
+            if (sectionsArray != null) {
+                for (i in 0 until sectionsArray.length()) {
+                    val secObj = sectionsArray.getJSONObject(i)
+                    val type = secObj.optString("type", "")
+                    val secTitle = secObj.optString("title", "")
+                    val itemsArray = secObj.optJSONArray("items")
+                    val items = mutableListOf<String>()
+                    if (itemsArray != null) {
+                        for (j in 0 until itemsArray.length()) {
+                            items.add(itemsArray.getString(j))
+                        }
+                    }
+                    if (items.isNotEmpty() || secTitle.isNotBlank()) {
+                        richSections.add(RichBriefSection(type, secTitle, items))
+                    }
+                }
+            }
+            
+            val statusObj = root.optJSONObject("day_status")
+            val dayStatus = if (statusObj != null) {
+                RichDayStatus(
+                    color = statusObj.optString("color", ""),
+                    reason = statusObj.optString("reason", ""),
+                    status = statusObj.optString("status", "")
+                )
+            } else null
+            
+            val closingMessage = root.optString("closing_message", "").takeIf { it.isNotBlank() }
+            val overallPriority = root.optString("overall_priority", "").takeIf { it.isNotBlank() }
+            
+            if (richSections.isNotEmpty() || dayStatus != null || closingMessage != null) {
+                return RichDailyBrief(
+                    title = titleObj.ifBlank { if (briefType == "EVENING") "Good Evening, Pradeep" else "Good Morning, Pradeep" },
+                    sections = richSections,
+                    dayStatus = dayStatus,
+                    closingMessage = closingMessage,
+                    overallPriority = overallPriority
+                )
+            }
+        } catch (e: Exception) {
+            Log.w("DailyBriefViewModel", "Failed to parse rich payloadJson", e)
+        }
+    }
+    
+    val fallbackItems = mutableListOf<String>()
+    try {
+        val array = JSONArray(itemsJson)
+        for (i in 0 until array.length()) {
+            fallbackItems.add(array.getString(i))
+        }
+    } catch (e: Exception) {
+        Log.w("DailyBriefViewModel", "Failed to parse fallback itemsJson", e)
+    }
+    
+    val fallbackSections = if (fallbackItems.isNotEmpty()) {
+        listOf(RichBriefSection(type = "general", title = "Summary", items = fallbackItems))
+    } else {
+        emptyList()
+    }
+    
+    return RichDailyBrief(
+        title = if (briefType == "EVENING") "Good Evening, Pradeep" else "Good Morning, Pradeep",
+        sections = fallbackSections,
+        dayStatus = null,
+        closingMessage = null,
+        overallPriority = null
+    )
+}
+
 data class DailyBriefUiState(
     val latestBrief: DailyBriefEntity? = null,
     val latestMorningBrief: DailyBriefEntity? = null,
     val latestEveningBrief: DailyBriefEntity? = null,
+    val richBrief: RichDailyBrief? = null,
     val sections: List<BriefSectionItem> = emptyList(),
     val payloadSections: List<BriefPayloadSection> = emptyList(),
     val generatedAt: String = "",
@@ -61,8 +159,8 @@ class DailyBriefViewModel(application: Application) : AndroidViewModel(applicati
                 val morning = DailyBriefRepository.getLatestByType(getApplication(), "MORNING")
                 val evening = DailyBriefRepository.getLatestByType(getApplication(), "EVENING")
 
-                // Prefer morning brief, fall back to latest
-                val primary = morning ?: latest
+                // Always use the latest brief record
+                val primary = latest
 
                 if (primary == null) {
                     _uiState.value = DailyBriefUiState(
@@ -76,11 +174,13 @@ class DailyBriefViewModel(application: Application) : AndroidViewModel(applicati
 
                 val sections = parseSections(primary.itemsJson)
                 val payloadSections = parsePayload(primary.payloadJson)
+                val richBrief = primary.parseToRichBrief()
 
                 _uiState.value = DailyBriefUiState(
                     latestBrief = primary,
                     latestMorningBrief = morning,
                     latestEveningBrief = evening,
+                    richBrief = richBrief,
                     sections = sections,
                     payloadSections = payloadSections,
                     generatedAt = primary.generatedAt,
@@ -88,7 +188,7 @@ class DailyBriefViewModel(application: Application) : AndroidViewModel(applicati
                     todoCount = primary.todoCount ?: 0,
                     fyiCount = primary.fyiCount ?: 0,
                     factCount = primary.factCount ?: 0,
-                    isEmpty = sections.isEmpty(),
+                    isEmpty = sections.isEmpty() && richBrief.sections.isEmpty() && richBrief.dayStatus == null && richBrief.closingMessage.isNullOrBlank(),
                     isLoading = false,
                     isError = false
                 )

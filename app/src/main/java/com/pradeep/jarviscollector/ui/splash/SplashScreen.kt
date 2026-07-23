@@ -1,117 +1,257 @@
 package com.pradeep.jarviscollector.ui.splash
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import java.util.Calendar
+
+private val BgDeep = Color(0xFF0A0F1E)
+private val SurfaceGlass = Color.White.copy(alpha = 0.05f)
+private val GlassBorder = Color.White.copy(alpha = 0.08f)
+private val AccentViolet = Color(0xFF8B5CF6)
+private val AccentIndigo = Color(0xFF6366F1)
+private val AccentEmerald = Color(0xFF10B981)
+private val TextPrimary = Color.White
+private val TextSecondary = Color(0xFF94A3B8)
+
+data class EngineStatus(
+    val name: String,
+    val isReady: Boolean = false
+)
 
 @Composable
 fun SplashScreen(
     ownerName: String,
     onNavigateToHome: () -> Unit
 ) {
-    val messages = listOf(
-        "Initializing Intelligence...",
-        "Loading Signals...",
-        "Preparing Daily Brief...",
-        "Checking Priorities...",
-        "Ready."
-    )
-    val messageIndex = remember { mutableIntStateOf(0) }
-    val showGreeting = remember { mutableStateOf(false) }
+    // ── Animation Stages ──────────────────────────────────────────────────────
+    var stage by remember { mutableIntStateOf(0) } // 0: Start, 1: Orb, 2: Title, 3: Engines, 4: Greeting, 5: Finish
 
-    LaunchedEffect(Unit) {
-        for (i in messages.indices) {
-            delay(400L)
-            messageIndex.intValue = i
+    // Engine Readiness checklist
+    var activeEngineIndex by remember { mutableIntStateOf(-1) }
+    val engineList = remember {
+        listOf(
+            "Signal Collector",
+            "Knowledge Engine",
+            "Financial Engine",
+            "Lifecycle Engine",
+            "Vault"
+        )
+    }
+
+    // Dynamic greeting calculation
+    val currentHour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    val timeGreeting = remember(currentHour) {
+        when {
+            currentHour in 0..11 -> "Good Morning"
+            currentHour in 12..16 -> "Good Afternoon"
+            else -> "Good Evening"
         }
-        showGreeting.value = true
-        delay(800L)
+    }
+    val displayName = remember(ownerName) { ownerName.trim().ifBlank { "Pradeep" } }
+
+    // ── Launch Timeline Controller (Total ~1.5 Seconds) ──────────────────────
+    LaunchedEffect(Unit) {
+        // Stage 1: Fade & Scale in Logo Orb (300 ms)
+        stage = 1
+        delay(250L)
+
+        // Stage 2: Fade up "J A R V I S" Title (350 ms)
+        stage = 2
+        delay(300L)
+
+        // Stage 3: Sequential Agentic Engine Statuses (500 ms)
+        stage = 3
+        for (i in engineList.indices) {
+            activeEngineIndex = i
+            delay(100L)
+        }
+        delay(150L)
+
+        // Stage 4: Ready Greeting (300 ms)
+        stage = 4
+        delay(350L)
+
+        // Stage 5: Transition to Home
+        stage = 5
+        delay(100L)
         onNavigateToHome()
     }
+
+    // Smooth Scale & Alpha Transitions for Logo & Title
+    val logoScale by animateFloatAsState(
+        targetValue = if (stage >= 1) 1.0f else 0.92f,
+        animationSpec = tween(durationMillis = 400, easing = FastOutSlowInEasing),
+        label = "logoScale"
+    )
+
+    val logoAlpha by animateFloatAsState(
+        targetValue = if (stage >= 1) 1.0f else 0.0f,
+        animationSpec = tween(durationMillis = 350),
+        label = "logoAlpha"
+    )
+
+    val titleAlpha by animateFloatAsState(
+        targetValue = if (stage >= 2) 1.0f else 0.0f,
+        animationSpec = tween(durationMillis = 350),
+        label = "titleAlpha"
+    )
+
+    val screenAlpha by animateFloatAsState(
+        targetValue = if (stage == 5) 0.0f else 1.0f,
+        animationSpec = tween(durationMillis = 250),
+        label = "screenAlpha"
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0B0B0E)),
+            .background(BgDeep)
+            .alpha(screenAlpha),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(24.dp)
         ) {
-            OrbAnimation()
-
-            AnimatedVisibility(
-                visible = true,
-                enter = fadeIn(tween(600)) + scaleIn(initialScale = 0.7f, animationSpec = tween(600))
+            // Stage 1: Glowing Assistant Orb Logo
+            Box(
+                modifier = Modifier
+                    .scale(logoScale)
+                    .alpha(logoAlpha),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "JARVIS",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        color = Color.White,
-                        fontSize = 36.sp
+                OrbAnimation(size = 110.dp)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Stage 2: Branded Title "J A R V I S"
+            Box(
+                modifier = Modifier.alpha(titleAlpha),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "J A R V I S",
+                        color = TextPrimary,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 6.sp
                     )
-                )
-            }
-
-            AnimatedVisibility(
-                visible = messageIndex.intValue < messages.size,
-                enter = fadeIn(tween(300)),
-                exit = fadeOut(tween(300))
-            ) {
-                Text(
-                    text = messages[messageIndex.intValue],
-                    color = Color(0xFFB0B0B3),
-                    fontSize = 16.sp
-                )
-            }
-
-            AnimatedVisibility(
-                visible = showGreeting.value,
-                enter = fadeIn(tween(500))
-            ) {
-                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-                val greeting = when (hour) {
-                    in 5..11 -> "Good Morning"
-                    in 12..16 -> "Good Afternoon"
-                    else -> "Good Evening"
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "INTELLIGENT PERSONAL ASSISTANT",
+                        color = AccentIndigo,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
                 }
-                Text(
-                    text = "$greeting, ${ownerName.replaceFirstChar { it.uppercase() }}",
-                    color = Color.White,
-                    fontSize = 20.sp
-                )
+            }
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            // Stage 3 & 4: Agentic Platform Engines Readiness Stream & Greeting
+            Box(
+                modifier = Modifier
+                    .height(180.dp)
+                    .fillMaxWidth(0.85f),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (stage in 3..4) {
+                        engineList.forEachIndexed { index, engineName ->
+                            val isVisible = activeEngineIndex >= index
+                            AnimatedVisibility(
+                                visible = isVisible,
+                                enter = fadeIn(tween(150)) + expandVertically(tween(150))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(SurfaceGlass)
+                                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(8.dp)
+                                                .clip(CircleShape)
+                                                .background(AccentEmerald)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = engineName,
+                                            color = TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                    Text(
+                                        text = "Ready",
+                                        color = AccentEmerald,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Stage 4: Workspace Ready Greeting
+                    if (stage >= 4) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(tween(250)) + scaleIn(initialScale = 0.95f)
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "✨ $timeGreeting, $displayName",
+                                    color = TextPrimary,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = "Your workspace is ready.",
+                                    color = TextSecondary,
+                                    fontSize = 12.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -119,27 +259,27 @@ fun SplashScreen(
 
 @Composable
 fun OrbAnimation(
-    size: Dp = 120.dp,
-    color: Color = Color(0xFF4A90E2)
+    size: Dp = 110.dp,
+    color: Color = Color(0xFF6366F1)
 ) {
     val infinite = rememberInfiniteTransition(label = "orbTransition")
-    val scale = infinite.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.1f,
+    val scale by infinite.animateFloat(
+        initialValue = 0.94f,
+        targetValue = 1.06f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
+            animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "orbPulse"
-    ).value
-    val rotation = infinite.animateFloat(
+    )
+    val rotation by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing)
+            animation = tween(3500, easing = LinearEasing)
         ),
         label = "orbRotation"
-    ).value
+    )
 
     Canvas(modifier = Modifier.size(size)) {
         val center = Offset(this.size.width / 2f, this.size.height / 2f)
@@ -147,19 +287,24 @@ fun OrbAnimation(
         withTransform(
             transformBlock = { rotate(degrees = rotation, pivot = center) }
         ) {
+            // Ambient outer glow
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(color.copy(alpha = 0.7f), color.copy(alpha = 0.0f)),
+                    colors = listOf(
+                        color.copy(alpha = 0.6f),
+                        Color(0xFF8B5CF6).copy(alpha = 0.2f),
+                        Color.Transparent
+                    ),
                     center = center,
                     radius = radius
                 ),
                 radius = radius,
                 center = center
             )
-            // Inner bright core
+            // Core energetic orb center
             drawCircle(
-                color = color.copy(alpha = 0.4f),
-                radius = radius * 0.35f,
+                color = Color.White.copy(alpha = 0.85f),
+                radius = radius * 0.25f,
                 center = center
             )
         }
